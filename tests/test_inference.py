@@ -19,14 +19,15 @@ import faulthandler
 import os
 import pathlib
 import tempfile
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import librosa
 import pretty_midi
 import numpy as np
 import numpy.typing as npt
+import pytest
 
-from basic_pitch import ICASSP_2022_MODEL_PATH, inference, note_creation
+from basic_pitch import ICASSP_2022_MODEL_PATH, FilenameSuffix, build_icassp_2022_model_path, inference, note_creation
 from basic_pitch.constants import (
     AUDIO_SAMPLE_RATE,
     AUDIO_N_SAMPLES,
@@ -192,3 +193,33 @@ def test_get_audio_input() -> None:
     np.testing.assert_equal(audio[:AUDIO_N_SAMPLES], np.squeeze(audio_windowed[0]))
 
     assert original_length == 200607
+
+
+def test_tflite_model_runs_on_litert() -> None:
+    pytest.importorskip("ai_edge_litert")
+    model = inference.Model(build_icassp_2022_model_path(FilenameSuffix.tflite))
+    assert model.model_type == inference.Model.MODEL_TYPES.TFLITE
+    assert type(model.interpreter).__module__.startswith("ai_edge_litert")
+
+    model_output, _, note_events = inference.predict(RESOURCES_PATH / "vocadito_10.wav", model)
+    expected_model_output = np.load(RESOURCES_PATH / "vocadito_10" / "model_output.npz", allow_pickle=True)[
+        "arr_0"
+    ].item()
+    for k in expected_model_output.keys():
+        np.testing.assert_allclose(expected_model_output[k], model_output[k], atol=1e-4, rtol=0)
+
+    expected_note_events = np.load(RESOURCES_PATH / "vocadito_10" / "note_events.npz", allow_pickle=True)["arr_0"]
+    assert len(expected_note_events) == len(note_events)
+    for expected, calculated in zip(expected_note_events, note_events):
+        for i in range(len(expected)):
+            np.testing.assert_allclose(expected[i], calculated[i], atol=1e-4, rtol=0)
+
+
+def test_tflite_model_num_threads(mocker: Any) -> None:
+    litert = pytest.importorskip("ai_edge_litert.interpreter")
+    spy = mocker.spy(litert, "Interpreter")
+    inference.Model(build_icassp_2022_model_path(FilenameSuffix.tflite), num_threads=1)
+    assert spy.call_args.kwargs["num_threads"] == 1
+
+    inference.Model(build_icassp_2022_model_path(FilenameSuffix.tflite))
+    assert spy.call_args.kwargs["num_threads"] == max(1, (os.cpu_count() or 1) // 2)

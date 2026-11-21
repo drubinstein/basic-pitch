@@ -29,7 +29,8 @@ dependencies = [
 	"scipy>=1.4.1",
 	"tensorflow>=2.4.1,<2.15.1; platform_system != 'Darwin' and python_version >= '3.11'",
 	"tensorflow-macos>=2.4.1,<2.15.1; platform_system == 'Darwin' and python_version > '3.11'",
-	"tflite-runtime; platform_system == 'Linux' and python_version < '3.11'",
+	"ai-edge-litert; platform_system == 'Linux' and python_version >= '3.10'",
+	"tflite-runtime; platform_system == 'Linux' and python_version < '3.10'",
 	"typing_extensions",
 ]
 
@@ -72,6 +73,7 @@ tf = [
 	"tensorflow-macos>=2.4.1,<2.15.1; platform_system == 'Darwin' and python_version > '3.7'",
 ]
 coreml = ["coremltools"] 
+litert = ["ai-edge-litert; python_version >= '3.10'"]
 onnx = ["onnxruntime"]
 docs = ["mkdocs>=1.0.4"]
 dev = [

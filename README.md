@@ -50,7 +50,7 @@ To update Basic Pitch to the latest version, add `--upgrade` to the above comman
 
 ### Model Runtime
 
-Basic Pitch comes with the original TensorFlow model and the TensorFlow model converted to [CoreML](https://developer.apple.com/documentation/coreml), [TensorFlowLite](https://www.tensorflow.org/lite), and [ONNX](https://onnx.ai/). By default, Basic Pitch will _not_ install TensorFlow as a dependency *unless you are using Python>=3.11*. Instead, by default, CoreML will be installed on MacOS, TensorFlowLite will be installed on Linux and ONNX will be installed on Windows. If you want to install TensorFlow along with the default model inference runtime, you can install TensorFlow via `pip install basic-pitch[tf]`.
+Basic Pitch comes with the original TensorFlow model and the TensorFlow model converted to [CoreML](https://developer.apple.com/documentation/coreml), [TensorFlowLite](https://www.tensorflow.org/lite), and [ONNX](https://onnx.ai/). By default, Basic Pitch will _not_ install TensorFlow as a dependency *unless you are using Python>=3.11*. Instead, by default, CoreML will be installed on MacOS, [LiteRT](https://developers.google.com/edge/litert) (formerly TensorFlow Lite) will be installed on Linux (`tflite-runtime` on Python < 3.10) and ONNX will be installed on Windows. To run the TFLite model with LiteRT on MacOS or Windows, install it via `pip install basic-pitch[litert]`. If you want to install TensorFlow along with the default model inference runtime, you can install TensorFlow via `pip install basic-pitch[tf]`.
 
 ## Usage
 
@@ -62,7 +62,7 @@ By default, Basic Pitch will attempt to load a model in the following order:
 
 1. TensorFlow
 2. CoreML
-3. TensorFlowLite
+3. TensorFlowLite (via LiteRT, `tflite-runtime`, or TensorFlow)
 4. ONNX
 
 Additionally, the module variable ICASSP_2022_MODEL_PATH will default to the first available version in the list.

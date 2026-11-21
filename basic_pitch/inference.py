@@ -37,10 +37,13 @@ except ImportError:
     pass
 
 try:
-    import tflite_runtime.interpreter as tflite
+    import ai_edge_litert.interpreter as tflite
 except ImportError:
-    if TF_PRESENT:
-        import tensorflow.lite as tflite
+    try:
+        import tflite_runtime.interpreter as tflite
+    except ImportError:
+        if TF_PRESENT:
+            import tensorflow.lite as tflite
 
 try:
     import onnxruntime as ort
@@ -67,6 +70,10 @@ from basic_pitch.commandline_printing import (
 )
 import basic_pitch.note_creation as infer
 
+# LiteRT defaults to a single thread, where tf.lite defaulted to several.
+# Half the cores keeps transcription fast without taking over the machine.
+DEFAULT_TFLITE_NUM_THREADS = max(1, (os.cpu_count() or 1) // 2)
+
 
 class Model:
     class MODEL_TYPES(enum.Enum):
@@ -75,7 +82,13 @@ class Model:
         TFLITE = enum.auto()
         ONNX = enum.auto()
 
-    def __init__(self, model_path: Union[pathlib.Path, str]):
+    def __init__(self, model_path: Union[pathlib.Path, str], num_threads: int = DEFAULT_TFLITE_NUM_THREADS):
+        """Load a model, trying each installed runtime in turn.
+
+        Args:
+            model_path: Path to a TF SavedModel, CoreML, TFLite or ONNX model.
+            num_threads: CPU threads for the TFLite (LiteRT) interpreter.
+        """
         present = []
         if TF_PRESENT:
             present.append("TensorFlow")
@@ -113,7 +126,7 @@ class Model:
             present.append("TensorFlowLite")
             try:
                 self.model_type = Model.MODEL_TYPES.TFLITE
-                self.interpreter = tflite.Interpreter(str(model_path))
+                self.interpreter = tflite.Interpreter(str(model_path), num_threads=num_threads)
                 self.model = self.interpreter.get_signature_runner()
                 return
             except Exception as e:
