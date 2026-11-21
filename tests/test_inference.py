@@ -74,7 +74,7 @@ def test_predict() -> None:
     assert len(expected_note_events) == len(note_events)
     for expected, calculated in zip(expected_note_events, note_events):
         for i in range(len(expected)):
-            np.testing.assert_allclose(expected[i], calculated[i], atol=1e-4, rtol=0)
+            np.testing.assert_allclose(np.asarray(expected[i]), np.asarray(calculated[i]), atol=1e-4, rtol=0)
 
 
 def test_predict_with_saves() -> None:
@@ -185,7 +185,6 @@ def test_get_audio_input() -> None:
     ):
         audio_windowed.append(audio_window)
         window_times.append(window_time)
-    audio_windowed = np.array(audio_windowed)
     assert len(audio_windowed) == 6
     assert len(window_times) == 6
     for time in window_times:
@@ -212,7 +211,7 @@ def test_tflite_model_runs_on_litert() -> None:
     assert len(expected_note_events) == len(note_events)
     for expected, calculated in zip(expected_note_events, note_events):
         for i in range(len(expected)):
-            np.testing.assert_allclose(expected[i], calculated[i], atol=1e-4, rtol=0)
+            np.testing.assert_allclose(np.asarray(expected[i]), np.asarray(calculated[i]), atol=1e-4, rtol=0)
 
 
 def test_tflite_model_num_threads(mocker: Any) -> None:

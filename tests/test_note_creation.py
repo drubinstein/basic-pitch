@@ -15,12 +15,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import List, Optional, Tuple
+
 from basic_pitch.note_creation import drop_overlapping_pitch_bends
 
 
 def test_drop_overlapping_pitch_bends() -> None:
     # events are: (start, end, pitch, amplitude, pitch_bend)
-    note_events_with_pitch_bends = [
+    note_events_with_pitch_bends: List[Tuple[float, float, int, float, Optional[List[int]]]] = [
         (0.0, 0.1, 60, 1.0, None),
         (2.0, 2.1, 62, 1.0, [0, 1, 2]),  # οverlaps w next
         (2.0, 2.1, 64, 1.0, [0, 1, 2]),  # overlaps w prev

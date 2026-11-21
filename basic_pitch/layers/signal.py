@@ -72,7 +72,7 @@ class Stft(tf.keras.layers.Layer):
                 # In that case the window is 0 padded such that the window is centered around 0s
                 # In the Tensorflow case, the window is computed, multiplied against the frame and then
                 # Right padded with 0's.
-                return tf.pad(self.window_fn(self.window_length, dtype=dtype), [[lpad, rpad]])  # type: ignore
+                return tf.pad(self.window_fn(self.window_length, dtype=dtype), [[lpad, rpad]])
 
             self.final_window_fn = padded_window
 
@@ -169,7 +169,7 @@ class NormalizedLog(tf.keras.layers.Layer):
             assert rank == 3, f"Only ranks 3 and 4 are supported!. Received rank {rank} for {input_shape}."
 
     def call(self, inputs: tf.Tensor) -> tf.Tensor:
-        inputs = self.squeeze_batch(inputs)  # type: ignore
+        inputs = self.squeeze_batch(inputs)
         # convert magnitude to power
         power = tf.math.square(inputs)
         log_power = 10 * log_base_b(power + 1e-10, 10)

@@ -45,7 +45,7 @@ tox
 
 ## Style
 
-Use `black` with defaults for Python code.
+Format and lint Python code with [ruff](https://docs.astral.sh/ruff/) (`tox -e format`), and type-check it with [ty](https://docs.astral.sh/ty/) (`tox -e typecheck`).
 
 ## Issues
 

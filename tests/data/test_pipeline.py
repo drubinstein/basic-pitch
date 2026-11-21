@@ -40,7 +40,7 @@ def test_batch() -> None:
 
     element = np.random.random([element_size])
     batcher = Batch(batch_size)
-    batches = list(batcher.process(element))
+    batches = list(batcher.process(list(element)))
     for batch in batches[:-1]:
         assert len(batch) == element_size // batch_size
 

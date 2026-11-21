@@ -78,8 +78,9 @@ onnx = ["onnxruntime"]
 docs = ["mkdocs>=1.0.4"]
 dev = [
 	"basic_pitch[data,test,tf,coreml,onnx,docs]",
-	"mypy",
+	"ruff",
 	"tox",
+	"ty",
 ]
 
 [tool.distutils.bdist_wheel]
@@ -90,4 +91,31 @@ requires = [
 	"setuptools>=40.8.0",
 	"wheel",
 	"cython",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py38"
+
+[tool.ruff.lint]
+# pycodestyle + pyflakes (what flake8 ran) plus annotations, which mypy --strict required.
+select = ["E", "W", "F", "ANN"]
+ignore = ["E731", "ANN204", "ANN401"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.ty.analysis]
+# Optional runtimes and data-pipeline dependencies: treat as untyped whether or not they're installed,
+# so results don't depend on which extras an environment has.
+replace-imports-with-any = [
+	"ai_edge_litert", "ai_edge_litert.**",
+	"apache_beam", "apache_beam.**",
+	"coremltools", "coremltools.**",
+	"ffmpeg", "ffmpeg.**",
+	"mirdata", "mirdata.**",
+	"onnxruntime", "onnxruntime.**",
+	"sox", "sox.**",
+	"tensorflow", "tensorflow.**",
+	"tflite_runtime", "tflite_runtime.**",
 ]

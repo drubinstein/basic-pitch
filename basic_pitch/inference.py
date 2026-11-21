@@ -21,7 +21,7 @@ import json
 import logging
 import os
 import pathlib
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union, cast
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 
 from basic_pitch import CT_PRESENT, ICASSP_2022_MODEL_PATH, ONNX_PRESENT, TF_PRESENT, TFLITE_PRESENT
@@ -168,22 +168,22 @@ class Model:
 
     def predict(self, x: npt.NDArray[np.float32]) -> Dict[str, npt.NDArray[np.float32]]:
         if self.model_type == Model.MODEL_TYPES.TENSORFLOW:
-            return {k: v.numpy() for k, v in cast(tf.keras.Model, self.model(x)).items()}
+            return {k: v.numpy() for k, v in self.model(x).items()}
         elif self.model_type == Model.MODEL_TYPES.COREML:
-            result = cast(ct.models.MLModel, self.model).predict({"input_2": x})
+            result = self.model.predict({"input_2": x})
             return {
                 "note": result["Identity_1"],
                 "onset": result["Identity_2"],
                 "contour": result["Identity"],
             }
         elif self.model_type == Model.MODEL_TYPES.TFLITE:
-            return self.model(input_2=x)  # type: ignore
+            return self.model(input_2=x)
         elif self.model_type == Model.MODEL_TYPES.ONNX:
             return {
                 k: v
                 for k, v in zip(
                     ["note", "onset", "contour"],
-                    cast(ort.InferenceSession, self.model).run(
+                    self.model.run(
                         [
                             "StatefulPartitionedCall:1",
                             "StatefulPartitionedCall:2",
@@ -262,7 +262,7 @@ def unwrap_output(
     audio_original_length: int,
     n_overlapping_frames: int,
     hop_size: int,
-) -> np.array:
+) -> npt.NDArray[Any]:
     """Unwrap batched model predictions to a single matrix.
 
     Args:
@@ -275,7 +275,7 @@ def unwrap_output(
         array (n_times, n_freqs)
     """
     if len(output.shape) != 3:
-        return None
+        raise ValueError(f"Expected batched model output with 3 dimensions, got shape {output.shape}")
 
     n_olap = int(0.5 * n_overlapping_frames)
     if n_olap > 0:
@@ -296,7 +296,7 @@ def run_inference(
     audio_path: Union[pathlib.Path, str],
     model_or_model_path: Union[Model, pathlib.Path, str],
     debug_file: Optional[pathlib.Path] = None,
-) -> Dict[str, np.array]:
+) -> Dict[str, npt.NDArray[Any]]:
     """Run the model on the input audio path.
 
     Args:
@@ -331,7 +331,7 @@ def run_inference(
         with open(debug_file, "w") as f:
             json.dump(
                 {
-                    "audio_windowed": audio_windowed.numpy().tolist(),
+                    "audio_windowed": audio_windowed.tolist(),
                     "audio_original_length": audio_original_length,
                     "hop_size_samples": hop_size,
                     "overlap_length_samples": overlap_len,
@@ -454,7 +454,7 @@ def predict(
     debug_file: Optional[pathlib.Path] = None,
     midi_tempo: float = DEFAULT_MINIMUM_MIDI_TEMPO,
 ) -> Tuple[
-    Dict[str, np.array],
+    Dict[str, npt.NDArray[Any]],
     pretty_midi.PrettyMIDI,
     List[Tuple[float, float, int, float, Optional[List[int]]]],
 ]:
@@ -578,7 +578,7 @@ def predict_and_save(
             if save_model_outputs:
                 model_output_path = build_output_path(audio_path, output_directory, OutputExtensions.MODEL_OUTPUT_NPZ)
                 try:
-                    np.savez(model_output_path, basic_pitch_model_output=model_output)
+                    np.savez(model_output_path, basic_pitch_model_output=model_output)  # ty: ignore[invalid-argument-type]
                     file_saved_confirmation(OutputExtensions.MODEL_OUTPUT_NPZ.name, model_output_path)
                 except Exception as e:
                     failed_to_save(OutputExtensions.MODEL_OUTPUT_NPZ.name, model_output_path)

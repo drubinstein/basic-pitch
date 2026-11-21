@@ -85,7 +85,7 @@ def transcription_dataset_writer(
 
 
 def run(
-    pipeline_options: Dict[str, str],
+    pipeline_options: Dict[str, Any],
     pipeline_args: List[str],
     input_data: List[Tuple[str, str]],
     to_tf_example: beam.DoFn,

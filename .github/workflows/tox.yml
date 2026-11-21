@@ -43,8 +43,8 @@ jobs:
       - name: Install tox
         run: python -m pip install tox
       # We will only check this on the minimum python version
-      - name: Check formatting, lint and mypy
-        run: tox -c tox.ini -e check-formatting,lint,mypy
+      - name: Check formatting, lint and types
+        run: tox -c tox.ini -e check-formatting,lint,typecheck
         if: matrix.py == '3.10'
       - name: Run test suite
         run: tox -c tox.ini -e py,manifest,full

@@ -19,7 +19,7 @@ import os
 import pathlib
 import threading
 from contextlib import contextmanager
-from typing import Iterator, Union
+from typing import Generator, Union
 
 TF_LOG_LEVEL_KEY = "TF_CPP_MIN_LOG_LEVEL"
 TF_LOG_LEVEL_NO_WARNINGS_VALUE = "3"
@@ -68,7 +68,7 @@ def failed_to_save(output_type: str, save_path: Union[pathlib.Path, str]) -> Non
 
 
 @contextmanager
-def no_tf_warnings() -> Iterator[None]:
+def no_tf_warnings() -> Generator[None, None, None]:
     """
     Supress tensorflow warnings in this context
     """

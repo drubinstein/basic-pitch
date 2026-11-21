@@ -22,6 +22,7 @@
 import warnings
 import tensorflow as tf
 import numpy as np
+import numpy.typing as npt
 from typing import Any, List, Optional, Tuple, Union
 
 import scipy.signal
@@ -118,7 +119,7 @@ def get_early_downsample_params(
     Q: float,
     n_octaves: int,
     dtype: tf.dtypes.DType,
-) -> Tuple[Union[float, int], int, float, np.array, bool]:
+) -> Tuple[Union[float, int], int, float, Optional[npt.NDArray[Any]], bool]:
     """Compute downsampling parameters used for early downsampling"""
 
     window_bandwidth = DEFAULT_WINDOW_BANDWIDTH  # for hann window
@@ -139,7 +140,7 @@ def get_early_downsample_params(
     return sr, hop_length, downsample_factor, early_downsample_filter, earlydownsample
 
 
-def get_window_dispatch(window: Union[str, Tuple[str, float]], N: int, fftbins: bool = True) -> np.array:
+def get_window_dispatch(window: Union[str, Tuple[str, float], float], N: int, fftbins: bool = True) -> npt.NDArray[Any]:
     if isinstance(window, str):
         return scipy.signal.get_window(window, N, fftbins=fftbins)
     elif isinstance(window, tuple):
@@ -148,9 +149,11 @@ def get_window_dispatch(window: Union[str, Tuple[str, float]], N: int, fftbins: 
             sigma = np.floor(-N / 2 / np.sqrt(-2 * np.log(10 ** (-window[1] / 20))))
             return scipy.signal.get_window(("gaussian", sigma), N, fftbins=fftbins)
         else:
-            Warning("Tuple windows may have undesired behaviour regarding Q factor")
+            warnings.warn("Tuple windows may have undesired behaviour regarding Q factor")
+            return scipy.signal.get_window(window, N, fftbins=fftbins)
     elif isinstance(window, float):
-        Warning("You are using Kaiser window with beta factor " + str(window) + ". Correct behaviour not checked.")
+        warnings.warn(f"You are using Kaiser window with beta factor {window}. Correct behaviour not checked.")
+        return scipy.signal.get_window(window, N, fftbins=fftbins)
     else:
         raise Exception("The function get_window from scipy only supports strings, tuples and floats.")
 
@@ -165,7 +168,7 @@ def create_cqt_kernels(
     window: str = "hann",
     fmax: Optional[float] = None,
     topbin_check: bool = True,
-) -> Tuple[np.array, int, np.array, np.array]:
+) -> Tuple[npt.NDArray[Any], int, npt.NDArray[Any], npt.NDArray[Any]]:
     """
     Automatically create CQT kernels in time domain
     """
@@ -621,7 +624,7 @@ class CQT2010v2(tf.keras.layers.Layer):
             raise ValueError(f"Input shape must be rank <= 3, found shape {input_shape}")
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
-        x = self.reshape_input(x)  # type: ignore
+        x = self.reshape_input(x)
 
         if self.earlydownsample is True:
             x = downsampling_by_n(x, self.early_downsample_filter, self.downsample_factor, self.match_torch_exactly)
