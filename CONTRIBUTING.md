@@ -45,6 +45,8 @@ tox
 
 ## Style
 
+Install tox with [uv](https://docs.astral.sh/uv/): `uv tool install tox --with tox-uv`.
+
 Format and lint Python code with [ruff](https://docs.astral.sh/ruff/) (`tox -e format`), and type-check it with [ty](https://docs.astral.sh/ty/) (`tox -e typecheck`).
 
 ## Issues

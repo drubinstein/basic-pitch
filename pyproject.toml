@@ -20,8 +20,10 @@ dependencies = [
 	"librosa>=0.8.0",
 	"mir_eval>=0.6.0",
 	"numpy>=1.18",
+	# TensorFlow < 2.15.1 is built against NumPy 1.x, but 2.14 doesn't declare it.
+	"numpy<2; platform_system != 'Darwin'",
 	"pretty_midi>=0.2.9",
-	"resampy>=0.2.2,<0.4.3",
+	"resampy>=0.4.3",
 	"scikit-learn",
 	"scipy>=1.4.1",
 	"tensorflow>=2.4.1,<2.15.1; platform_system != 'Darwin'",
@@ -67,6 +69,7 @@ test = [
 tf = [
 	"tensorflow>=2.4.1,<2.15.1; platform_system != 'Darwin'",
 	"tensorflow-macos>=2.4.1,<2.15.1; platform_system == 'Darwin'",
+	"numpy<2",
 ]
 coreml = ["coremltools"] 
 litert = ["ai-edge-litert"]
