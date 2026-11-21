@@ -19,7 +19,7 @@ import faulthandler
 import os
 import pathlib
 import tempfile
-from typing import Any, Dict, List
+from typing import Any
 
 import librosa
 import pretty_midi
@@ -178,8 +178,8 @@ def test_get_audio_input() -> None:
     audio, _ = librosa.load(str(test_audio_path), sr=AUDIO_SAMPLE_RATE, mono=True)
     overlap_len = 30 * FFT_HOP
     audio = np.concatenate([np.zeros((overlap_len // 2,), dtype=np.float32), audio])
-    audio_windowed: List[npt.NDArray[np.float32]] = []
-    window_times: List[Dict[str, float]] = []
+    audio_windowed: list[npt.NDArray[np.float32]] = []
+    window_times: list[dict[str, float]] = []
     for audio_window, window_time, original_length in inference.get_audio_input(
         test_audio_path, overlap_len, AUDIO_N_SAMPLES - overlap_len
     ):

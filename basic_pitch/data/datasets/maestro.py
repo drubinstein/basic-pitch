@@ -20,7 +20,7 @@ import logging
 import os
 import sys
 import time
-from typing import Any, Dict, List, TextIO, Tuple
+from typing import Any, TextIO
 
 import apache_beam as beam
 import mirdata
@@ -48,7 +48,7 @@ class MaestroInvalidTracks(beam.DoFn):
         self.maestro_remote = mirdata.initialize("maestro", data_home=self.source)
         self.filesystem = beam.io.filesystems.FileSystems()
 
-    def process(self, element: Tuple[str, str], *args: Tuple[Any, Any], **kwargs: Dict[str, Any]) -> Any:
+    def process(self, element: tuple[str, str], *args: tuple[Any, Any], **kwargs: dict[str, Any]) -> Any:
         import tempfile
         import sox
 
@@ -91,7 +91,7 @@ class MaestroToTfExample(beam.DoFn):
         if self.download:
             self.maestro_remote.download()
 
-    def process(self, element: List[str], *args: Tuple[Any, Any], **kwargs: Dict[str, Any]) -> List[Any]:
+    def process(self, element: list[str], *args: tuple[Any, Any], **kwargs: dict[str, Any]) -> list[Any]:
         import tempfile
 
         import numpy as np
@@ -163,13 +163,13 @@ class MaestroToTfExample(beam.DoFn):
         return [batch]
 
 
-def create_input_data() -> List[Tuple[str, str]]:
+def create_input_data() -> list[tuple[str, str]]:
     maestro = mirdata.initialize("maestro")
     maestro.download(["metadata"])
     return [(track_id, track.split) for track_id, track in maestro.load_tracks().items()]
 
 
-def main(known_args: argparse.Namespace, pipeline_args: List[str]) -> None:
+def main(known_args: argparse.Namespace, pipeline_args: list[str]) -> None:
     time_created = int(time.time())
     destination = commandline.resolve_destination(known_args, time_created)
 

@@ -21,7 +21,6 @@ import tensorflow as tf
 import mir_eval
 import librosa
 
-from typing import Dict
 
 from basic_pitch.constants import (
     AUDIO_SAMPLE_RATE,
@@ -68,8 +67,8 @@ def visualize_transcription(
     file_writer: tf.summary.SummaryWriter,
     stage: str,
     inputs: tf.Tensor,
-    targets: Dict[str, tf.Tensor],
-    outputs: Dict[str, tf.Tensor],
+    targets: dict[str, tf.Tensor],
+    outputs: dict[str, tf.Tensor],
     loss: float,
     step: int,
     sonify: bool = True,

@@ -21,7 +21,7 @@ import os
 import random
 import time
 
-from typing import Any, List, Dict, Tuple, Optional
+from typing import Any
 
 import apache_beam as beam
 import mirdata
@@ -30,7 +30,7 @@ from basic_pitch.data import commandline, pipeline
 
 
 class GuitarSetInvalidTracks(beam.DoFn):
-    def process(self, element: Tuple[str, str], *args: Tuple[Any, Any], **kwargs: Dict[str, Any]) -> Any:
+    def process(self, element: tuple[str, str], *args: tuple[Any, Any], **kwargs: dict[str, Any]) -> Any:
         track_id, split = element
         yield beam.pvalue.TaggedOutput(split, track_id)
 
@@ -51,7 +51,7 @@ class GuitarSetToTfExample(beam.DoFn):
         if self.download:
             self.guitarset_remote.download()
 
-    def process(self, element: List[str], *args: Tuple[Any, Any], **kwargs: Dict[str, Any]) -> List[Any]:
+    def process(self, element: list[str], *args: tuple[Any, Any], **kwargs: dict[str, Any]) -> list[Any]:
         import tempfile
 
         import mirdata
@@ -124,8 +124,8 @@ class GuitarSetToTfExample(beam.DoFn):
 
 
 def create_input_data(
-    train_percent: float, validation_percent: float, seed: Optional[int] = None
-) -> List[Tuple[str, str]]:
+    train_percent: float, validation_percent: float, seed: int | None = None
+) -> list[tuple[str, str]]:
     assert train_percent + validation_percent < 1.0, "Don't over allocate the data!"
 
     # Test percent is 1 - train - validation
@@ -151,7 +151,7 @@ def create_input_data(
     return [(track_id, determine_split(i)) for i, track_id in enumerate(track_ids)]
 
 
-def main(known_args: argparse.Namespace, pipeline_args: List[str]) -> None:
+def main(known_args: argparse.Namespace, pipeline_args: list[str]) -> None:
     time_created = int(time.time())
     destination = commandline.resolve_destination(known_args, time_created)
     input_data = create_input_data(known_args.train_percent, known_args.validation_percent, known_args.split_seed)

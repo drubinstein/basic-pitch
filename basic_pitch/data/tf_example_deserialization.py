@@ -17,7 +17,8 @@
 
 import os
 import uuid
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Any
+from collections.abc import Callable, Iterator
 
 import numpy as np
 import tensorflow as tf
@@ -44,9 +45,9 @@ def prepare_datasets(
     training_shuffle_buffer_size: int,
     batch_size: int,
     validation_steps: int,
-    datasets_to_use: List[str],
+    datasets_to_use: list[str],
     dataset_sampling_frequency: np.ndarray,
-) -> Tuple[tf.data.Dataset, tf.data.Dataset]:
+) -> tuple[tf.data.Dataset, tf.data.Dataset]:
     """
     Return a training and a testing dataset.
 
@@ -112,9 +113,9 @@ def prepare_visualization_datasets(
     datasets_base_path: str,
     batch_size: int,
     validation_steps: int,
-    datasets_to_use: List[str],
+    datasets_to_use: list[str],
     dataset_sampling_frequency: np.ndarray,
-) -> Tuple[tf.data.Dataset, tf.data.Dataset]:
+) -> tuple[tf.data.Dataset, tf.data.Dataset]:
     """
     Return a training and a testing dataset for visualization
 
@@ -171,7 +172,7 @@ def prepare_visualization_datasets(
 def sample_datasets(
     split: Split,
     datasets_base_path: str,
-    datasets: List[str],
+    datasets: list[str],
     dataset_sampling_frequency: np.ndarray,
     n_shuffle: int = 1000,
     n_samples_per_track: int = N_SAMPLES_PER_TRACK,
@@ -240,10 +241,10 @@ def sample_datasets(
 
 def transcription_file_generator(
     split: Split,
-    dataset_names: List[str],
+    dataset_names: list[str],
     datasets_base_path: str,
     sample_weights: np.ndarray,
-) -> Tuple[Callable[[], Iterator[tf.Tensor]], bool]:
+) -> tuple[Callable[[], Iterator[tf.Tensor]], bool]:
     """Reads underlying files and returns file generator
 
     Args:
@@ -265,7 +266,7 @@ def transcription_file_generator(
     return lambda: _validation_file_generator(file_dict), True
 
 
-def _train_file_generator(x: Dict[str, tf.data.Dataset], weights: np.ndarray) -> Iterator[tf.Tensor]:
+def _train_file_generator(x: dict[str, tf.data.Dataset], weights: np.ndarray) -> Iterator[tf.Tensor]:
     """file generator for training sets"""
     x = {k: list(v) for (k, v) in x.items()}
     keys = list(x.keys())
@@ -279,7 +280,7 @@ def _train_file_generator(x: Dict[str, tf.data.Dataset], weights: np.ndarray) ->
         yield fpath
 
 
-def _validation_file_generator(x: Dict[str, tf.data.Dataset]) -> Iterator[tf.Tensor]:
+def _validation_file_generator(x: dict[str, tf.data.Dataset]) -> Iterator[tf.Tensor]:
     """file generator for validation sets"""
     x = {k: list(v) for (k, v) in x.items()}
     # loop until there are no more test files
@@ -294,8 +295,8 @@ def _validation_file_generator(x: Dict[str, tf.data.Dataset]) -> Iterator[tf.Ten
 
 
 def combine_transcription_examples(
-    a: tf.Tensor, target: Dict[str, tf.Tensor], w: Dict[str, tf.Tensor]
-) -> Tuple[tf.Tensor, Dict[str, tf.Tensor], Dict[str, tf.Tensor]]:
+    a: tf.Tensor, target: dict[str, tf.Tensor], w: dict[str, tf.Tensor]
+) -> tuple[tf.Tensor, dict[str, tf.Tensor], dict[str, tf.Tensor]]:
     """mix pairs together for paired dataset
 
     Args:
@@ -367,7 +368,7 @@ def transcription_dataset(
 
 def parse_transcription_tfexample(
     serialized_example: tf.train.Example,
-) -> Tuple[
+) -> tuple[
     tf.Tensor,
     tf.Tensor,
     tf.Tensor,
@@ -463,11 +464,11 @@ def sparse2dense(values: tf.Tensor, indices: tf.Tensor, dense_shape: tf.Tensor) 
 def reduce_transcription_inputs(
     file_id: str,
     src: str,
-    wav: Tuple[tf.Tensor, int],
+    wav: tuple[tf.Tensor, int],
     notes: tf.Tensor,
     onsets: tf.Tensor,
     contour: tf.Tensor,
-) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, Dict[str, str]]:
+) -> tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, dict[str, str]]:
     """Map tf records data to a tuple
     If audio is stereo, it is mixed down to mono.
     This will error if the sample rate of the wav file is different from
@@ -520,8 +521,8 @@ def _infer_time_size(onsets: tf.Tensor, contour: tf.Tensor, notes: tf.Tensor) ->
 
 
 def get_sample_weights(
-    audio: tf.Tensor, onsets: np.ndarray, contour: np.ndarray, notes: np.ndarray, metadata: Dict[Any, Any]
-) -> Tuple[tf.Tensor, np.ndarray, np.ndarray, np.ndarray, tf.cond, tf.cond, tf.cond, Dict[Any, Any]]:
+    audio: tf.Tensor, onsets: np.ndarray, contour: np.ndarray, notes: np.ndarray, metadata: dict[Any, Any]
+) -> tuple[tf.Tensor, np.ndarray, np.ndarray, np.ndarray, tf.cond, tf.cond, tf.cond, dict[Any, Any]]:
     """Add sample weights based on whether or not the target is empty
     If it's empty, the weight is 0, otherwise it's 1. Empty targets get filled
     with matricies of 0's
@@ -609,7 +610,7 @@ def trim_time(data: np.ndarray, start: int, duration: int, sr: int) -> tf.Tensor
 
 def extract_window(
     audio: tf.Tensor, onsets: np.ndarray, contour: np.ndarray, notes: np.ndarray, t_start: int
-) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]:
+) -> tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]:
     """extracts a window of data from the given audio and its associated metadata
 
     Args:
@@ -635,8 +636,8 @@ def extract_window(
 
 
 def extract_random_window(
-    audio: tf.Tensor, onsets: np.ndarray, contour: np.ndarray, notes: np.ndarray, seed: Optional[int]
-) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]:
+    audio: tf.Tensor, onsets: np.ndarray, contour: np.ndarray, notes: np.ndarray, seed: int | None
+) -> tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]:
     """Trim transcription data to a fixed length of time
     starting from a random time index.
     Args:
@@ -737,7 +738,7 @@ def to_transcription_training_input(
     onset_weight: int,
     contour_weight: int,
     note_weight: int,
-) -> Tuple[tf.Tensor, Dict[str, tf.Tensor], Dict[str, int]]:
+) -> tuple[tf.Tensor, dict[str, tf.Tensor], dict[str, int]]:
     """convert transcription data to the format expected by the model"""
     return (
         audio,

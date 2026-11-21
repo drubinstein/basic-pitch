@@ -16,7 +16,6 @@
 # limitations under the License.
 import os
 import pathlib
-from typing import List
 
 import apache_beam as beam
 from apache_beam.testing.test_pipeline import TestPipeline
@@ -50,7 +49,7 @@ def test_maestro_to_tf_example(tmp_path: pathlib.Path, mock_maestro_index: None)
     output_dir = tmp_path / "outputs"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    input_data: List[str] = [TRAIN_TRACK_ID]
+    input_data: list[str] = [TRAIN_TRACK_ID]
     with TestPipeline() as p:
         (
             p

@@ -18,7 +18,6 @@
 import numpy as np
 import tensorflow as tf
 
-from typing import Dict
 
 from basic_pitch.callbacks import VisualizeCallback
 from basic_pitch.constants import AUDIO_N_SAMPLES, ANNOTATIONS_N_SEMITONES, ANNOT_N_FRAMES
@@ -28,7 +27,7 @@ class MockModel(tf.keras.Model):
     def __init__(self) -> None:
         super(MockModel, self).__init__()
 
-    def call(self, inputs: tf.Tensor) -> Dict[str, tf.Tensor]:
+    def call(self, inputs: tf.Tensor) -> dict[str, tf.Tensor]:
         return {
             key: tf.random.normal((1, ANNOTATIONS_N_SEMITONES, ANNOT_N_FRAMES)) for key in ["onset", "contour", "note"]
         }

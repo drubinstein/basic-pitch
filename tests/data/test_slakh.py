@@ -20,7 +20,6 @@ import os
 import pathlib
 import shutil
 
-from typing import List, Tuple
 
 from apache_beam.testing.test_pipeline import TestPipeline
 
@@ -50,7 +49,7 @@ OMITTED_DRUMS_TRACK_ID = "Track00049-S06"
 
 
 # Function to generate a sine wave
-def create_mock_input_data(data_home: pathlib.Path, input_data: List[Tuple[str, str]]) -> None:
+def create_mock_input_data(data_home: pathlib.Path, input_data: list[tuple[str, str]]) -> None:
     for track_id, split in input_data:
         track_num, inst_num = track_id.split("-")
         track_dir = data_home / split / track_num
@@ -70,7 +69,7 @@ def test_slakh_to_tf_example(tmp_path: pathlib.Path, mock_slakh_index: None) -> 
     mock_slakh_home = tmp_path / "slakh"
     mock_slakh_ext = mock_slakh_home / "slakh2100_flac_redux"
 
-    input_data: List[Tuple[str, str]] = [(TRAIN_PIANO_TRACK_ID, "train")]
+    input_data: list[tuple[str, str]] = [(TRAIN_PIANO_TRACK_ID, "train")]
     create_mock_input_data(mock_slakh_ext, input_data)
 
     output_dir = tmp_path / "outputs"

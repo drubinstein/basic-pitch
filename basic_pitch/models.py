@@ -15,7 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Callable, Dict
+from typing import Any
+from collections.abc import Callable
 import numpy as np
 import tensorflow as tf
 
@@ -123,7 +124,7 @@ def loss(
     label_smoothing: float = DEFAULT_LABEL_SMOOTHING,
     weighted: bool = False,
     positive_weight: float = DEFAULT_POSITIVE_WEIGHT,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Creates a keras-compatible dictionary of loss functions to calculate
     the loss for the contour, note and onset posteriorgrams.
 

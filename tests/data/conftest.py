@@ -1,7 +1,7 @@
 import pytest
 import json
 import pathlib
-from typing import Iterator
+from collections.abc import Iterator
 from unittest import mock
 
 RESOURCES_PATH = pathlib.Path(__file__).parent.parent / "resources"

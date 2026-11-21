@@ -22,7 +22,6 @@ import shutil
 import tensorflow as tf
 
 from apache_beam.testing.test_pipeline import TestPipeline
-from typing import List
 
 from basic_pitch.constants import Split
 from basic_pitch.data.datasets.guitarset import GuitarSetToTfExample
@@ -47,7 +46,7 @@ def create_empty_tfrecord(filepath: pathlib.Path) -> None:
         writer.write("")
 
 
-def create_tfrecord(input_data: List[str], dataset_home: str, output_dir: str) -> None:
+def create_tfrecord(input_data: list[str], dataset_home: str, output_dir: str) -> None:
     with TestPipeline() as p:
         (
             p

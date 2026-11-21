@@ -21,7 +21,8 @@ import json
 import logging
 import os
 import pathlib
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Any
+from collections.abc import Iterable, Sequence
 
 
 from basic_pitch import CT_PRESENT, ICASSP_2022_MODEL_PATH, ONNX_PRESENT, TF_PRESENT, TFLITE_PRESENT
@@ -39,11 +40,8 @@ except ImportError:
 try:
     import ai_edge_litert.interpreter as tflite
 except ImportError:
-    try:
-        import tflite_runtime.interpreter as tflite
-    except ImportError:
-        if TF_PRESENT:
-            import tensorflow.lite as tflite
+    if TF_PRESENT:
+        import tensorflow.lite as tflite
 
 try:
     import onnxruntime as ort
@@ -82,7 +80,7 @@ class Model:
         TFLITE = enum.auto()
         ONNX = enum.auto()
 
-    def __init__(self, model_path: Union[pathlib.Path, str], num_threads: int = DEFAULT_TFLITE_NUM_THREADS):
+    def __init__(self, model_path: pathlib.Path | str, num_threads: int = DEFAULT_TFLITE_NUM_THREADS):
         """Load a model, trying each installed runtime in turn.
 
         Args:
@@ -166,7 +164,7 @@ class Model:
             f"{present} is installed."
         )
 
-    def predict(self, x: npt.NDArray[np.float32]) -> Dict[str, npt.NDArray[np.float32]]:
+    def predict(self, x: npt.NDArray[np.float32]) -> dict[str, npt.NDArray[np.float32]]:
         if self.model_type == Model.MODEL_TYPES.TENSORFLOW:
             return {k: v.numpy() for k, v in self.model(x).items()}
         elif self.model_type == Model.MODEL_TYPES.COREML:
@@ -206,7 +204,7 @@ DEFAULT_MIDI_VELOCITY_SCALE = 127
 
 def window_audio_file(
     audio_original: npt.NDArray[np.float32], hop_size: int
-) -> Iterable[Tuple[npt.NDArray[np.float32], Dict[str, float]]]:
+) -> Iterable[tuple[npt.NDArray[np.float32], dict[str, float]]]:
     """
     Pad appropriately an audio file, and return as
     windowed signal, with window length = AUDIO_N_SAMPLES
@@ -233,8 +231,8 @@ def window_audio_file(
 
 
 def get_audio_input(
-    audio_path: Union[pathlib.Path, str], overlap_len: int, hop_size: int
-) -> Iterable[Tuple[npt.NDArray[np.float32], Dict[str, float], int]]:
+    audio_path: pathlib.Path | str, overlap_len: int, hop_size: int
+) -> Iterable[tuple[npt.NDArray[np.float32], dict[str, float], int]]:
     """
     Read wave file (as mono), pad appropriately, and return as
     windowed signal, with window length = AUDIO_N_SAMPLES
@@ -293,10 +291,10 @@ def unwrap_output(
 
 
 def run_inference(
-    audio_path: Union[pathlib.Path, str],
-    model_or_model_path: Union[Model, pathlib.Path, str],
-    debug_file: Optional[pathlib.Path] = None,
-) -> Dict[str, npt.NDArray[Any]]:
+    audio_path: pathlib.Path | str,
+    model_or_model_path: Model | pathlib.Path | str,
+    debug_file: pathlib.Path | None = None,
+) -> dict[str, npt.NDArray[Any]]:
     """Run the model on the input audio path.
 
     Args:
@@ -317,7 +315,7 @@ def run_inference(
     overlap_len = n_overlapping_frames * FFT_HOP
     hop_size = AUDIO_N_SAMPLES - overlap_len
 
-    output: Dict[str, Any] = {"note": [], "onset": [], "contour": []}
+    output: dict[str, Any] = {"note": [], "onset": [], "contour": []}
     for audio_windowed, _, audio_original_length in get_audio_input(audio_path, overlap_len, hop_size):
         for k, v in model.predict(audio_windowed).items():
             output[k].append(v)
@@ -350,7 +348,7 @@ class OutputExtensions(enum.Enum):
     NOTE_EVENTS = "csv"
 
 
-def verify_input_path(audio_path: Union[pathlib.Path, str]) -> None:
+def verify_input_path(audio_path: pathlib.Path | str) -> None:
     """Verify that an input path is valid and can be processed
 
     Args:
@@ -366,7 +364,7 @@ def verify_input_path(audio_path: Union[pathlib.Path, str]) -> None:
         raise ValueError(f"🚨 {audio_path} does not exist.")
 
 
-def verify_output_dir(output_dir: Union[pathlib.Path, str]) -> None:
+def verify_output_dir(output_dir: pathlib.Path | str) -> None:
     """Verify that an output directory is valid and can be processed
 
     Args:
@@ -383,8 +381,8 @@ def verify_output_dir(output_dir: Union[pathlib.Path, str]) -> None:
 
 
 def build_output_path(
-    audio_path: Union[pathlib.Path, str],
-    output_directory: Union[pathlib.Path, str],
+    audio_path: pathlib.Path | str,
+    output_directory: pathlib.Path | str,
     output_type: OutputExtensions,
 ) -> pathlib.Path:
     """Create an output path and make sure it doesn't already exist.
@@ -420,8 +418,8 @@ def build_output_path(
 
 
 def save_note_events(
-    note_events: List[Tuple[float, float, int, float, Optional[List[int]]]],
-    save_path: Union[pathlib.Path, str],
+    note_events: list[tuple[float, float, int, float, list[int] | None]],
+    save_path: pathlib.Path | str,
 ) -> None:
     """Save note events to file
 
@@ -442,21 +440,21 @@ def save_note_events(
 
 
 def predict(
-    audio_path: Union[pathlib.Path, str],
-    model_or_model_path: Union[Model, pathlib.Path, str] = ICASSP_2022_MODEL_PATH,
+    audio_path: pathlib.Path | str,
+    model_or_model_path: Model | pathlib.Path | str = ICASSP_2022_MODEL_PATH,
     onset_threshold: float = DEFAULT_ONSET_THRESHOLD,
     frame_threshold: float = DEFAULT_FRAME_THRESHOLD,
     minimum_note_length: float = DEFAULT_MINIMUM_NOTE_LENGTH_MS,
-    minimum_frequency: Optional[float] = None,
-    maximum_frequency: Optional[float] = None,
+    minimum_frequency: float | None = None,
+    maximum_frequency: float | None = None,
     multiple_pitch_bends: bool = False,
     melodia_trick: bool = True,
-    debug_file: Optional[pathlib.Path] = None,
+    debug_file: pathlib.Path | None = None,
     midi_tempo: float = DEFAULT_MINIMUM_MIDI_TEMPO,
-) -> Tuple[
-    Dict[str, npt.NDArray[Any]],
+) -> tuple[
+    dict[str, npt.NDArray[Any]],
     pretty_midi.PrettyMIDI,
-    List[Tuple[float, float, int, float, Optional[List[int]]]],
+    list[tuple[float, float, int, float, list[int] | None]],
 ]:
     """Run a single prediction.
 
@@ -520,21 +518,21 @@ def predict(
 
 
 def predict_and_save(
-    audio_path_list: Sequence[Union[pathlib.Path, str]],
-    output_directory: Union[pathlib.Path, str],
+    audio_path_list: Sequence[pathlib.Path | str],
+    output_directory: pathlib.Path | str,
     save_midi: bool,
     sonify_midi: bool,
     save_model_outputs: bool,
     save_notes: bool,
-    model_or_model_path: Union[Model, str, pathlib.Path],
+    model_or_model_path: Model | str | pathlib.Path,
     onset_threshold: float = DEFAULT_ONSET_THRESHOLD,
     frame_threshold: float = DEFAULT_FRAME_THRESHOLD,
     minimum_note_length: float = DEFAULT_MINIMUM_NOTE_LENGTH_MS,
-    minimum_frequency: Optional[float] = None,
-    maximum_frequency: Optional[float] = None,
+    minimum_frequency: float | None = None,
+    maximum_frequency: float | None = None,
     multiple_pitch_bends: bool = False,
     melodia_trick: bool = True,
-    debug_file: Optional[pathlib.Path] = None,
+    debug_file: pathlib.Path | None = None,
     sonification_samplerate: int = DEFAULT_SONIFICATION_SAMPLERATE,
     midi_tempo: float = DEFAULT_MINIMUM_MIDI_TEMPO,
 ) -> None:

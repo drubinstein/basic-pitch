@@ -19,7 +19,7 @@ import os
 import pathlib
 import threading
 from contextlib import contextmanager
-from typing import Generator, Union
+from collections.abc import Generator
 
 TF_LOG_LEVEL_KEY = "TF_CPP_MIN_LOG_LEVEL"
 TF_LOG_LEVEL_NO_WARNINGS_VALUE = "3"
@@ -44,7 +44,7 @@ def generating_file_message(output_type: str) -> None:
     print(f"\n\n{DEFAULT_PRINT_INDENT}Creating {output_type.replace('_', ' ').lower()}...")
 
 
-def file_saved_confirmation(output_type: str, save_path: Union[pathlib.Path, str]) -> None:
+def file_saved_confirmation(output_type: str, save_path: pathlib.Path | str) -> None:
     """Print a confirmation that the file was saved succesfully
 
     Args:
@@ -56,7 +56,7 @@ def file_saved_confirmation(output_type: str, save_path: Union[pathlib.Path, str
     print(f"{DEFAULT_PRINT_INDENT}{emoji} Saved to {save_path}")
 
 
-def failed_to_save(output_type: str, save_path: Union[pathlib.Path, str]) -> None:
+def failed_to_save(output_type: str, save_path: pathlib.Path | str) -> None:
     """Print a failure to save message
 
     Args:

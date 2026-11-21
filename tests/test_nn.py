@@ -15,7 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Iterator, Tuple
+from typing import Any
+from collections.abc import Iterator
 import unittest
 
 import numpy as np
@@ -36,7 +37,7 @@ tfkl = tf.keras.layers
 
 
 class TestHarmonicStacking(unittest.TestCase):
-    def _audio_data_gen(self) -> Iterator[Tuple[npt.NDArray[Any], npt.NDArray[Any]]]:
+    def _audio_data_gen(self) -> Iterator[tuple[npt.NDArray[Any], npt.NDArray[Any]]]:
         while True:
             audio = np.random.uniform(size=(BATCH_SIZE, AUDIO_N_SAMPLES, 1)).astype(np.float32)
             output = np.random.uniform(size=(BATCH_SIZE, ANNOT_N_FRAMES, ANNOTATIONS_N_SEMITONES * 3, 1)).astype(

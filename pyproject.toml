@@ -3,6 +3,7 @@ name = "basic-pitch"
 version = "0.4.0"
 description = "Basic Pitch, a lightweight yet powerful audio-to-MIDI converter with pitch bend detection."
 readme = "README.md"
+requires-python = ">=3.11"
 keywords = []
 classifiers = [
 	"Development Status :: 5 - Production/Stable",
@@ -11,9 +12,6 @@ classifiers = [
 	"Operating System :: MacOS :: MacOS X",
 	"Operating System :: Microsoft :: Windows",
 	"Programming Language :: Python",
-	"Programming Language :: Python :: 3.8",
-	"Programming Language :: Python :: 3.9",
-	"Programming Language :: Python :: 3.10",
 	"Programming Language :: Python :: 3.11",
 	"Programming Language :: Python :: Implementation :: CPython",
 ]
@@ -22,15 +20,13 @@ dependencies = [
 	"librosa>=0.8.0",
 	"mir_eval>=0.6.0",
 	"numpy>=1.18",
-	"onnxruntime; platform_system == 'Windows' and python_version < '3.11'",
 	"pretty_midi>=0.2.9",
 	"resampy>=0.2.2,<0.4.3",
 	"scikit-learn",
 	"scipy>=1.4.1",
-	"tensorflow>=2.4.1,<2.15.1; platform_system != 'Darwin' and python_version >= '3.11'",
+	"tensorflow>=2.4.1,<2.15.1; platform_system != 'Darwin'",
 	"tensorflow-macos>=2.4.1,<2.15.1; platform_system == 'Darwin' and python_version > '3.11'",
-	"ai-edge-litert; platform_system == 'Linux' and python_version >= '3.10'",
-	"tflite-runtime; platform_system == 'Linux' and python_version < '3.10'",
+	"ai-edge-litert; platform_system == 'Linux'",
 	"typing_extensions",
 ]
 
@@ -70,10 +66,10 @@ test = [
 ]
 tf = [
 	"tensorflow>=2.4.1,<2.15.1; platform_system != 'Darwin'",
-	"tensorflow-macos>=2.4.1,<2.15.1; platform_system == 'Darwin' and python_version > '3.7'",
+	"tensorflow-macos>=2.4.1,<2.15.1; platform_system == 'Darwin'",
 ]
 coreml = ["coremltools"] 
-litert = ["ai-edge-litert; python_version >= '3.10'"]
+litert = ["ai-edge-litert"]
 onnx = ["onnxruntime"]
 docs = ["mkdocs>=1.0.4"]
 dev = [
@@ -95,11 +91,12 @@ requires = [
 
 [tool.ruff]
 line-length = 120
-target-version = "py38"
+target-version = "py311"
 
 [tool.ruff.lint]
-# pycodestyle + pyflakes (what flake8 ran) plus annotations, which mypy --strict required.
-select = ["E", "W", "F", "ANN"]
+# pycodestyle + pyflakes (what flake8 ran), annotations (which mypy --strict required), and pyupgrade's
+# typing rules (builtin generics, X | None, collections.abc imports).
+select = ["E", "W", "F", "ANN", "UP006", "UP007", "UP035", "UP045"]
 ignore = ["E731", "ANN204", "ANN401"]
 
 [tool.ruff.lint.per-file-ignores]
@@ -117,5 +114,4 @@ replace-imports-with-any = [
 	"onnxruntime", "onnxruntime.**",
 	"sox", "sox.**",
 	"tensorflow", "tensorflow.**",
-	"tflite_runtime", "tflite_runtime.**",
 ]

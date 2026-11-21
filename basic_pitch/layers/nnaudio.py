@@ -23,7 +23,7 @@ import warnings
 import tensorflow as tf
 import numpy as np
 import numpy.typing as npt
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any
 
 import scipy.signal
 
@@ -83,12 +83,12 @@ def next_power_of_2(A: int) -> int:
 
 
 def early_downsample(
-    sr: Union[float, int],
+    sr: float | int,
     hop_length: int,
     n_octaves: int,
     nyquist_hz: float,
     filter_cutoff_hz: float,
-) -> Tuple[Union[float, int], int, int]:
+) -> tuple[float | int, int, int]:
     """Return new sampling rate and hop length after early downsampling"""
     downsample_count = early_downsample_count(nyquist_hz, filter_cutoff_hz, hop_length, n_octaves)
     downsample_factor = 2 ** (downsample_count)
@@ -113,13 +113,13 @@ def early_downsample_count(nyquist_hz: float, filter_cutoff_hz: float, hop_lengt
 
 
 def get_early_downsample_params(
-    sr: Union[float, int],
+    sr: float | int,
     hop_length: int,
     fmax_t: float,
     Q: float,
     n_octaves: int,
     dtype: tf.dtypes.DType,
-) -> Tuple[Union[float, int], int, float, Optional[npt.NDArray[Any]], bool]:
+) -> tuple[float | int, int, float, npt.NDArray[Any] | None, bool]:
     """Compute downsampling parameters used for early downsampling"""
 
     window_bandwidth = DEFAULT_WINDOW_BANDWIDTH  # for hann window
@@ -140,7 +140,7 @@ def get_early_downsample_params(
     return sr, hop_length, downsample_factor, early_downsample_filter, earlydownsample
 
 
-def get_window_dispatch(window: Union[str, Tuple[str, float], float], N: int, fftbins: bool = True) -> npt.NDArray[Any]:
+def get_window_dispatch(window: str | tuple[str, float] | float, N: int, fftbins: bool = True) -> npt.NDArray[Any]:
     if isinstance(window, str):
         return scipy.signal.get_window(window, N, fftbins=fftbins)
     elif isinstance(window, tuple):
@@ -166,9 +166,9 @@ def create_cqt_kernels(
     bins_per_octave: int = 12,
     norm: int = 1,
     window: str = "hann",
-    fmax: Optional[float] = None,
+    fmax: float | None = None,
     topbin_check: bool = True,
-) -> Tuple[npt.NDArray[Any], int, npt.NDArray[Any], npt.NDArray[Any]]:
+) -> tuple[npt.NDArray[Any], int, npt.NDArray[Any], npt.NDArray[Any]]:
     """
     Automatically create CQT kernels in time domain
     """
@@ -292,12 +292,12 @@ class ReflectionPad1D(tf.keras.layers.Layer):
     Replica of Torch's nn.ReflectionPad1D in TF.
     """
 
-    def __init__(self, padding: Union[int, Tuple[int]] = 1, **kwargs: Any):
+    def __init__(self, padding: int | tuple[int] = 1, **kwargs: Any):
         self.padding = padding
         self.input_spec = [tf.keras.layers.InputSpec(ndim=3)]
         super(ReflectionPad1D, self).__init__(**kwargs)
 
-    def compute_output_shape(self, s: List[int]) -> Tuple[int, int, int]:
+    def compute_output_shape(self, s: list[int]) -> tuple[int, int, int]:
         return (s[0], s[1], s[2] + 2 * self.padding if isinstance(self.padding, int) else self.padding[0])
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
@@ -309,13 +309,13 @@ class ConstantPad1D(tf.keras.layers.Layer):
     Replica of Torch's nn.ConstantPad1D in TF.
     """
 
-    def __init__(self, padding: Union[int, Tuple[int]] = 1, value: int = 0, **kwargs: Any):
+    def __init__(self, padding: int | tuple[int] = 1, value: int = 0, **kwargs: Any):
         self.padding = padding
         self.value = value
         self.input_spec = [tf.keras.layers.InputSpec(ndim=3)]
         super(ConstantPad1D, self).__init__(**kwargs)
 
-    def compute_output_shape(self, s: List[int]) -> Tuple[int, int, int]:
+    def compute_output_shape(self, s: list[int]) -> tuple[int, int, int]:
         return (s[0], s[1], s[2] + 2 * self.padding if isinstance(self.padding, int) else self.padding[0])
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
@@ -475,7 +475,7 @@ class CQT2010v2(tf.keras.layers.Layer):
         sr: int = 22050,
         hop_length: int = DEFAULT_CQT_HOP_LENGTH,
         fmin: float = DEFAULT_CQT_FMIN,
-        fmax: Optional[float] = None,
+        fmax: float | None = None,
         n_bins: int = DEFAULT_CQT_N_BINS,
         filter_scale: int = 1,
         bins_per_octave: int = DEFAULT_CQT_BINS_PER_OCTAVE,
@@ -490,7 +490,7 @@ class CQT2010v2(tf.keras.layers.Layer):
     ):
         super().__init__()
 
-        self.sample_rate: Union[float, int] = sr
+        self.sample_rate: float | int = sr
         self.hop_length = hop_length
         self.fmin = fmin
         self.fmax = fmax

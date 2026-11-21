@@ -17,7 +17,7 @@
 
 import os
 
-from typing import Any, Dict
+from typing import Any
 
 import tensorflow as tf
 
@@ -55,7 +55,7 @@ class VisualizeCallback(tf.keras.callbacks.Callback):
         self.sonify = sonify
         self.contours = contours
 
-    def on_epoch_end(self, epoch: int, logs: Dict[Any, Any]) -> None:
+    def on_epoch_end(self, epoch: int, logs: dict[Any, Any]) -> None:
         # the first two outputs of generator needs to be the input and the targets
         train_inputs, train_targets = next(self.train_iter)[:2]
         validation_inputs, validation_targets = next(self.validation_iter)[:2]

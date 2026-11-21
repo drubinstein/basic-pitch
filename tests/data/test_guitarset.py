@@ -20,7 +20,6 @@ import os
 import pathlib
 import shutil
 from apache_beam.testing.test_pipeline import TestPipeline
-from typing import List
 
 from basic_pitch.data.datasets.guitarset import (
     GuitarSetToTfExample,
@@ -51,7 +50,7 @@ def test_guitarset_to_tf_example(tmp_path: pathlib.Path, mock_guitarset_index: N
         mock_guitarset_annotations / f"{TRACK_ID}.jams",
     )
 
-    input_data: List[str] = [TRACK_ID]
+    input_data: list[str] = [TRACK_ID]
     with TestPipeline() as p:
         (
             p

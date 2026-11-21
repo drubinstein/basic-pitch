@@ -20,7 +20,7 @@ import logging
 import os
 import time
 
-from typing import List, Tuple, Any
+from typing import Any
 
 import apache_beam as beam
 import mirdata
@@ -40,7 +40,7 @@ class SlakhFilterInvalidTracks(beam.DoFn):
         self.slakh_remote = mirdata.initialize("slakh", data_home=self.source)
         self.filesystem = beam.io.filesystems.FileSystems()
 
-    def process(self, element: Tuple[str, str]) -> Any:
+    def process(self, element: tuple[str, str]) -> Any:
         import tempfile
 
         import apache_beam as beam
@@ -108,7 +108,7 @@ class SlakhToTfExample(beam.DoFn):
         if self.download:
             self.slakh_remote.download()
 
-    def process(self, element: List[str]) -> List[Any]:
+    def process(self, element: list[str]) -> list[Any]:
         import tempfile
 
         import numpy as np
@@ -180,13 +180,13 @@ class SlakhToTfExample(beam.DoFn):
         return [batch]
 
 
-def create_input_data() -> List[Tuple[str, str]]:
+def create_input_data() -> list[tuple[str, str]]:
     slakh = mirdata.initialize("slakh")
     slakh.download(["index"])
     return [(track_id, track.data_split) for track_id, track in slakh.load_tracks().items()]
 
 
-def main(known_args: argparse.Namespace, pipeline_args: List[str]) -> None:
+def main(known_args: argparse.Namespace, pipeline_args: list[str]) -> None:
     time_created = int(time.time())
     destination = commandline.resolve_destination(known_args, time_created)
     input_data = create_input_data()

@@ -21,7 +21,7 @@ import os
 import random
 import sys
 import time
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any
 
 import apache_beam as beam
 import mirdata
@@ -31,7 +31,7 @@ from basic_pitch.data import commandline, pipeline
 
 # Oct 2025: Ikala remote download is broken on mirdata side # TODO: Re-evaluate later
 class IkalaInvalidTracks(beam.DoFn):
-    def process(self, element: Tuple[str, str], *args: Tuple[Any, Any], **kwargs: Dict[str, Any]) -> Any:
+    def process(self, element: tuple[str, str], *args: tuple[Any, Any], **kwargs: dict[str, Any]) -> Any:
         track_id, split = element
         yield beam.pvalue.TaggedOutput(split, track_id)
 
@@ -53,7 +53,7 @@ class IkalaToTfExample(beam.DoFn):
         if self.download:
             self.ikala_remote.download()
 
-    def process(self, element: List[str], *args: Tuple[Any, Any], **kwargs: Dict[str, Any]) -> List[Any]:
+    def process(self, element: list[str], *args: tuple[Any, Any], **kwargs: dict[str, Any]) -> list[Any]:
         import tempfile
 
         import numpy as np
@@ -136,7 +136,7 @@ class IkalaToTfExample(beam.DoFn):
         return [batch]
 
 
-def create_input_data(train_percent: float, seed: Optional[int] = None) -> List[Tuple[str, str]]:
+def create_input_data(train_percent: float, seed: int | None = None) -> list[tuple[str, str]]:
     assert train_percent < 1.0, "Don't over allocate the data!"
 
     if seed:
@@ -153,7 +153,7 @@ def create_input_data(train_percent: float, seed: Optional[int] = None) -> List[
     return [(track_id, determine_split(i)) for i, track_id in enumerate(track_ids)]
 
 
-def main(known_args: argparse.Namespace, pipeline_args: List[str]) -> None:
+def main(known_args: argparse.Namespace, pipeline_args: list[str]) -> None:
     time_created = int(time.time())
     destination = commandline.resolve_destination(known_args, time_created)
 

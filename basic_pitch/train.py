@@ -19,7 +19,6 @@ import argparse
 import os
 import logging
 from datetime import datetime, timezone
-from typing import List
 
 import numpy as np
 import tensorflow as tf
@@ -42,7 +41,7 @@ def main(
     steps_per_epoch: int,
     validation_steps: int,
     size_evaluation_callback_datasets: int,
-    datasets_to_use: List[str],
+    datasets_to_use: list[str],
     dataset_sampling_frequency: np.ndarray,
     no_sonify: bool,
     no_contours: bool,

@@ -15,12 +15,7 @@ jobs:
           - windows-latest
         py:
           - "3.11"
-          - "3.10"
-          - "3.9"
-          - "3.8"
         include:
-          - os: macos-latest-xlarge
-            py: "3.10.11"
           - os: macos-latest-xlarge
             py: "3.11.8"
     steps:
@@ -45,7 +40,7 @@ jobs:
       # We will only check this on the minimum python version
       - name: Check formatting, lint and types
         run: tox -c tox.ini -e check-formatting,lint,typecheck
-        if: matrix.py == '3.10'
+        if: matrix.py == '3.11'
       - name: Run test suite
         run: tox -c tox.ini -e py,manifest,full
       - name: Check that basic-pitch can be run as a commandline
