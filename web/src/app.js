@@ -4,7 +4,8 @@
 import { FRAMES_PER_WINDOW, N_PITCHES, SAMPLE_RATE, frameToTime, nOutputFrames } from './pipeline.js';
 import { PianoRoll } from './roll.js';
 import * as cache from './cache.js';
-import { Clock, formatTime } from './playback.js';
+import { Clock, formatTime, ANCHOR } from './playback.js';
+import { startMic, toWav } from './mic.js';
 import { noteName, noteHz, meanActivation } from './notes.js';
 import { toMidi, velocity } from './midi.js';
 import { renderReport } from './report.js';
@@ -197,9 +198,25 @@ function showCached(name, hit) {
 
 const modeLabel = (custom = false) => `${mode === 'original' ? 'Original (melodia trick' : 'Live (streaming HMM'}${custom ? ', pedalboard settings' : ''})`;
 
+// Notes decoded again by the pedalboard (same model output, other settings or decoder).
+function applyDecoded(m, { name, duration, totalFrames }) {
+  if (m.id !== decodeId) return;
+  const notes = m.notes;
+  for (const n of notes) n[5] ??= velocity(meanActivation(roll.tiles, FRAMES_PER_WINDOW, n[0], n[1], n[2]));
+  roll.setNotes(notes);
+  results = notes;
+  synthNotes();
+  Object.assign(window.basicPitch, { mode: m.mode, notes, decodeMs: m.decodeMs, redecoded: true });
+  finished = { name, mode: m.mode, notes };
+  setStatus(`${name}: ${notes.length} notes`);
+  setStats(`${modeLabel(!isDefaultFor(m.mode))} · decoded again in ${m.decodeMs < 1000 ? `${Math.round(m.decodeMs)} ms` : `${(m.decodeMs / 1000).toFixed(1)} s`}, without running the model`);
+  if (isDefaultFor(m.mode)) cache.save({ key: cache.resultKey(current?.hash, m.mode), name, duration, totalFrames, notes, activation: roll.activation() });
+}
+
 // blob: the file (a File, or the example fetched as a Blob).
 async function open(name, blob, { useCache = isDefaultFor(mode) } = {}) {
   const id = ++opened, stale = () => id !== opened;
+  cancelRecording();
   showTranscribe();
   decodeId = 0;
   worker?.terminate();
@@ -256,17 +273,7 @@ async function open(name, blob, { useCache = isDefaultFor(mode) } = {}) {
       setStatus(`Transcribing ${name}… ${m.done}/${m.windows} windows${runMode === 'original' ? ' · notes come once the whole file is in' : ''}`);
       setStats(`${runtime} · ${(secs / (m.elapsedMs / 1000)).toFixed(1)}× real time`);
     } else if (m.type === 'decoded') {
-      if (m.id !== decodeId) return;
-      const notes = m.notes;
-      for (const n of notes) n[5] ??= velocity(meanActivation(roll.tiles, FRAMES_PER_WINDOW, n[0], n[1], n[2]));
-      roll.setNotes(notes);
-      results = notes;
-      synthNotes();
-      Object.assign(window.basicPitch, { mode: m.mode, notes, decodeMs: m.decodeMs, redecoded: true });
-      finished = { name, mode: m.mode, notes };
-      setStatus(`${name}: ${notes.length} notes`);
-      setStats(`${modeLabel(!isDefaultFor(m.mode))} · decoded again in ${m.decodeMs < 1000 ? `${Math.round(m.decodeMs)} ms` : `${(m.decodeMs / 1000).toFixed(1)} s`}, without running the model`);
-      if (isDefaultFor(m.mode)) cache.save({ key: cache.resultKey(current?.hash, m.mode), name, duration, totalFrames, notes, activation: roll.activation() });
+      applyDecoded(m, { name, duration, totalFrames });
     } else if (m.type === 'done') {
       if (decodeId !== 0) {
         // The pedalboard changed something meanwhile; its decoding comes next.
@@ -417,6 +424,145 @@ addEventListener('keydown', (e) => {
   e.preventDefault();
   toggle();
 });
+
+// --- Microphone: transcribe while you play or sing. Audio streams to the worker, which runs each
+// model window as soon as its audio is in; notes trail the sound by about one window (2 s). When
+// recording stops, the recording becomes a file like any other. ---
+
+const MIN_VIEW = 8; // seconds shown while a recording is still short
+let mic = null, micLast = null;
+
+async function startRecording() {
+  if (mic) return;
+  ++opened;
+  decodeId = 0;
+  worker?.terminate();
+  audio.pause();
+  if (audio.getAttribute('src')) { audio.removeAttribute('src'); audio.load(); }
+  $('player').hidden = true;
+  current = null;
+  finished = null;
+  results = [];
+  $('again').hidden = true;
+  $('download').hidden = true;
+  showTranscribe();
+  const name = `recording-${new Date().toTimeString().slice(0, 8).replaceAll(':', '')}.wav`;
+  const session = { name, runtime: '', chunks: [], samples: 0 };
+  const result = { name, mode: 'live', duration: 0, notes: [], order: [], recording: true };
+  window.basicPitch = result;
+  const w = (worker = new Worker('worker.js'));
+  w.onmessage = ({ data: m }) => { if (worker === w) recordingMessage(m, session, result); };
+  w.postMessage({ type: 'stream-start', params: allSettings() });
+  roll.reset(MIN_VIEW, 0);
+  roll.anchor = 0.85; // the live edge near the right, the past to its left
+  setStatus('Asking for the microphone…');
+  try {
+    mic = await startMic((chunk) => {
+      session.chunks.push(chunk.slice());
+      session.samples += chunk.length;
+      w.postMessage({ type: 'stream-audio', samples: chunk }, [chunk.buffer]);
+    });
+  } catch (err) {
+    w.terminate();
+    if (worker === w) worker = null;
+    roll.anchor = ANCHOR;
+    setStatus(`Couldn't use the microphone: ${err.message}`);
+    return;
+  }
+  Object.assign(mic, { session, start: mic.ctx.currentTime });
+  $('mic').classList.add('recording');
+  $('mic').querySelector('span').textContent = 'Stop';
+  setStats('Notes trail the sound by about 2 s: the model listens in 2-second windows.');
+  micLast = null;
+  roll.follow(true);
+  requestAnimationFrame(recordingFrame);
+}
+
+function recordingFrame(now) {
+  if (!mic) return;
+  const t = Math.max(0, mic.ctx.currentTime - mic.start);
+  const motion = micLast ? { advance: Math.max(0, t - micLast.t), dt: (now - micLast.now) / 1000 } : { advance: 0, dt: 0 };
+  micLast = { t, now };
+  roll.grow(Math.max(MIN_VIEW, t), roll.totalFrames);
+  roll.setPlayhead(t, motion);
+  setStatus(`Listening… ${formatTime(t).slice(0, -2)}`);
+  requestAnimationFrame(recordingFrame);
+}
+
+// Stop: the worker finishes the last window, and the recording becomes a WAV file.
+function stopRecording() {
+  if (!mic) return;
+  const m = mic;
+  mic = null;
+  m.stop();
+  worker?.postMessage({ type: 'stream-stop' });
+  $('mic').classList.remove('recording');
+  $('mic').querySelector('span').textContent = 'Mic';
+  const samples = new Float32Array(m.session.samples);
+  let o = 0;
+  for (const c of m.session.chunks) { samples.set(c, o); o += c.length; }
+  m.session.blob = new Blob([toWav(samples, SAMPLE_RATE)], { type: 'audio/wav' });
+  m.session.chunks = [];
+  setStatus(`Finishing ${m.session.name}…`);
+}
+
+function cancelRecording() {
+  if (!mic) return;
+  mic.stop();
+  mic = null;
+  roll.anchor = ANCHOR;
+  $('mic').classList.remove('recording');
+  $('mic').querySelector('span').textContent = 'Mic';
+}
+
+async function recordingMessage(m, session, result) {
+  if (m.type === 'ready') {
+    session.runtime = `LiteRT.js wasm · ${m.numThreads} thread${m.numThreads === 1 ? '' : 's'}`;
+  } else if (m.type === 'progress') {
+    roll.grow(Math.max(roll.duration, m.samples / SAMPLE_RATE), m.totalFrames);
+    roll.addTile(m.window, m.activation);
+    if (decodeId === 0) {
+      roll.addNotes(m.notes);
+      result.notes.push(...m.notes);
+    }
+    result.order.push(m.window);
+  } else if (m.type === 'done') {
+    const duration = m.samples / SAMPLE_RATE, { name } = session;
+    Object.assign(session, { duration, totalFrames: m.totalFrames });
+    roll.anchor = ANCHOR;
+    roll.grow(duration, m.totalFrames);
+    if (decodeId === 0) {
+      roll.addNotes(m.notes);
+      result.notes.push(...m.notes);
+    }
+    for (const n of result.notes) n[5] ??= velocity(meanActivation(roll.tiles, FRAMES_PER_WINDOW, n[0], n[1], n[2]));
+    results = result.notes;
+    Object.assign(result, { done: true, duration, runs: m.runs, modelMs: m.modelMs });
+    current = { name, blob: session.blob };
+    loadAudio(session.blob);
+    roll.setPlayhead(0);
+    roll.fit();
+    synthNotes();
+    finished = { name, mode: 'live', notes: result.notes };
+    $('again').hidden = false;
+    $('download').hidden = false;
+    $('total').textContent = formatTime(duration);
+    setStatus(`${name}: ${result.notes.length} notes`);
+    setStats(`Microphone · ${modeLabel(!isDefaultFor('live'))} · ${session.runtime} · model ${(m.modelMs / 1000).toFixed(2)} s for ${duration.toFixed(1)} s of audio`);
+    current.hash = await cache.fileHash(await session.blob.arrayBuffer()).catch(() => null);
+    if (mode !== 'live') decodeAgain(); // the worker has everything it needs for the original decoder
+    else if (isDefaultFor('live')) cache.save({ key: cache.resultKey(current.hash, 'live'), name, duration, totalFrames: m.totalFrames, notes: result.notes, activation: roll.activation() });
+  } else if (m.type === 'decoded') {
+    applyDecoded(m, { name: session.name, duration: session.duration, totalFrames: session.totalFrames });
+  } else if (m.type === 'error') {
+    cancelRecording();
+    setStatus(`Something went wrong: ${m.message.split('\n')[0]}`);
+    result.error = m.message;
+    console.error(m.message);
+  }
+}
+
+$('mic').addEventListener('click', () => (mic ? stopRecording() : startRecording()));
 
 // --- Note tooltip: the hovered note, or the selected one. ---
 

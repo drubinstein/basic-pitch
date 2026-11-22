@@ -41,12 +41,13 @@ export class Clock {
 }
 
 // The view's new start time while following the playhead at t (seconds), given how far the
-// playhead moved since the last frame (`advance`) and the wall time since then (`dt`). Off
+// playhead moved since the last frame (`advance`) and the wall time since then (`dt`). `anchor` is
+// where the playhead settles, as a fraction of the view's width. Off
 // screen, the view jumps to the playhead; left of the anchor, the view stays put; past it, the
 // view moves with the playhead and closes the gap smoothly.
-export function followT0({ t0, span, t, advance, dt, duration }) {
+export function followT0({ t0, span, t, advance, dt, duration, anchor = ANCHOR }) {
   const max = Math.max(0, duration - span), clamp = (v) => Math.min(max, Math.max(0, v));
-  const target = t - ANCHOR * span;
+  const target = t - anchor * span;
   if (t < t0 || t > t0 + span) return clamp(target);
   if (target <= t0) return clamp(t0);
   const gap = target - advance - t0; // before this frame's advance

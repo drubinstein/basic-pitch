@@ -7,7 +7,7 @@
 // LiteRT.js loads its Emscripten module with importScripts().
 import { loadLiteRt, loadAndCompile } from '@litertjs/core';
 import { runWindow } from './model.js';
-import { FRAMES_PER_WINDOW, N_PITCHES, nOutputFrames, toByte, windowAt, windowFrames } from './pipeline.js';
+import { AUDIO_N_SAMPLES, FRAMES_PER_WINDOW, HOP, N_PITCHES, OVERLAP_LEN, SAMPLE_RATE, nOutputFrames, toByte, windowAt, windowFrames } from './pipeline.js';
 import { StreamingHmm } from './hmm.js';
 import { LIVE, ORIGINAL, defaults, hmmOptions, originalOptions } from './params.js';
 import { WindowedDecoder, nextWindow, nextMissing } from './segments.js';
@@ -124,11 +124,91 @@ async function transcribe(audio, mode, params = {}) {
   }
 }
 
+// --- Streaming from the microphone: windows run as soon as their audio is in, in order, through
+// one streaming HMM; {type: 'stream-stop'} finishes the last partial window. ---
+
+let live = null;
+const grown = (arr, need) => {
+  if (arr.length >= need) return arr;
+  const out = new Float32Array(Math.max(need, arr.length * 2));
+  out.set(arr);
+  return out;
+};
+
+async function streamStart(params = {}) {
+  // Set up right away so audio arriving while the model loads is kept.
+  const { prm, beam, maxLag } = hmmOptions({ ...defaults(LIVE), ...params.live });
+  live = { model: null, audio: new Float32Array(SAMPLE_RATE * 60), len: 0, next: 0, frames: 0, note: new Float32Array(0), onset: new Float32Array(0),
+    hmm: new StreamingHmm(prm, { beam, maxLag }), busy: false, stopping: false, finished: false, modelMs: 0, t1: performance.now() };
+  try {
+    const t0 = performance.now();
+    const { model, threads, numThreads } = await load();
+    self.postMessage({ type: 'ready', threads, numThreads, loadMs: performance.now() - t0 });
+    live.model = model;
+    pump();
+  } catch (err) {
+    self.postMessage({ type: 'error', message: String(err?.stack || err) });
+  }
+}
+
+function streamAudio(samples) {
+  if (!live || live.stopping) return;
+  live.audio = grown(live.audio, live.len + samples.length);
+  live.audio.set(samples, live.len);
+  live.len += samples.length;
+  pump();
+}
+
+async function pump() {
+  const s = live;
+  if (!s || !s.model || s.busy || s.finished) return;
+  s.busy = true;
+  try {
+    for (;;) {
+      await yieldToMessages();
+      const w = s.next, total = s.stopping ? nOutputFrames(s.len) : Infinity;
+      // A window is ready once all its audio is in (its frames then always fit in the final count).
+      if (s.stopping ? w * FRAMES_PER_WINDOW >= total : s.len < w * HOP - OVERLAP_LEN / 2 + AUDIO_N_SAMPLES) break;
+      const a = performance.now();
+      const out = await runWindow(s.model, windowAt(s.audio.subarray(0, s.len), w));
+      s.modelMs += performance.now() - a;
+      const k = Math.min(FRAMES_PER_WINDOW, total - w * FRAMES_PER_WINDOW), start = w * FRAMES_PER_WINDOW;
+      const note = windowFrames(out.note, N_PITCHES).slice(0, k * N_PITCHES), onset = windowFrames(out.onset, N_PITCHES).slice(0, k * N_PITCHES);
+      s.note = grown(s.note, (start + k) * N_PITCHES);
+      s.onset = grown(s.onset, (start + k) * N_PITCHES);
+      s.note.set(note, start * N_PITCHES);
+      s.onset.set(onset, start * N_PITCHES);
+      for (let t = 0; t < k; t++) s.hmm.push(note.subarray(t * N_PITCHES, (t + 1) * N_PITCHES), onset.subarray(t * N_PITCHES, (t + 1) * N_PITCHES));
+      s.frames = start + k;
+      s.next++;
+      const activation = Uint8Array.from(note, toByte);
+      self.postMessage({ type: 'progress', window: w, windows: s.next, done: s.next, start, frames: k, totalFrames: s.frames, samples: s.len, activation, notes: s.hmm.drain(),
+        runs: s.next, modelMs: s.modelMs, elapsedMs: performance.now() - s.t1 }, [activation.buffer]);
+    }
+    if (s.stopping && !s.finished) {
+      s.finished = true;
+      s.hmm.finish();
+      kept = { note: s.note.subarray(0, s.frames * N_PITCHES), onset: s.onset.subarray(0, s.frames * N_PITCHES), totalFrames: s.frames };
+      self.postMessage({ type: 'done', totalFrames: s.frames, windows: s.next, notes: s.hmm.drain(), runs: s.next, modelMs: s.modelMs, decodeMs: 0, elapsedMs: performance.now() - s.t1, samples: s.len });
+      redecode();
+    }
+  } catch (err) {
+    self.postMessage({ type: 'error', message: String(err?.stack || err) });
+  } finally {
+    s.busy = false;
+  }
+  if (!s.finished && (s.stopping || s.len >= s.next * HOP - OVERLAP_LEN / 2 + AUDIO_N_SAMPLES)) pump();
+}
+
 function onMessage({ data }) {
   if (data.type === 'view') view = [data.first, data.last];
   else if (data.type === 'transcribe') {
     if (data.view) view = data.view;
     transcribe(data.audio, data.mode, data.params);
+  } else if (data.type === 'stream-start') streamStart(data.params);
+  else if (data.type === 'stream-audio') streamAudio(data.samples);
+  else if (data.type === 'stream-stop') {
+    if (live) { live.stopping = true; pump(); }
   } else if (data.type === 'redecode') {
     pending = data;
     redecode();

@@ -105,6 +105,9 @@
     }
     .chip svg { width: 16px; height: 16px; vertical-align: -3px; margin-right: 2px; }
     #pedals[aria-pressed="true"] { background: var(--accent); color: #fff; }
+    #mic.recording { background: #d6402f; color: #fff; animation: pulse 1.6s ease-in-out infinite; }
+    @keyframes pulse { 50% { box-shadow: 0 0 0 6px rgba(214, 64, 47, 0.25); } }
+    @media (prefers-reduced-motion: reduce) { #mic.recording { animation: none; } }
 
     /* Pedalboard */
     .board { flex: none; background: repeating-linear-gradient(90deg, #26262a 0 2px, #222226 2px 6px); border-top: 1px solid #111; color: #ececef; padding: 8px 16px 14px; overflow-x: auto; }
@@ -266,6 +269,7 @@
         </div>
         <button id="pedals" class="chip" type="button" aria-pressed="false" aria-controls="board" title="Knobs for each decoder's settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 12 9 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Pedalboard</button>
         <button id="example" class="chip" type="button">Try an example</button>
+        <button id="mic" class="chip" type="button" title="Transcribe from your microphone"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> <span>Mic</span></button>
       </div>
       <div id="stats" class="float stats"></div>
 
@@ -335,7 +339,9 @@
 
       <h3>Open a file</h3>
       <p>Click the search bar at the top left (“Open or drop an audio file…”), drop a file anywhere on the page, or
-        press <b>Try an example</b> (vocadito track 10, a sung melody). WAV, MP3, AAC, FLAC and Ogg work, depending on what your browser can decode.</p>
+        press <b>Try an example</b> (vocadito track 10, a sung melody). <b>Mic</b> transcribes from your microphone as you
+        play or sing; notes trail the sound by about 2 seconds, since the model listens in 2-second windows. Press
+        <b>Stop</b> and the recording becomes a file you can play back, re-decode or download as MIDI. WAV, MP3, AAC, FLAC and Ogg work, depending on what your browser can decode.</p>
 
       <h3>Live or Original</h3>
       <p><b>Live</b> makes notes with a streaming decoder (a hidden Markov model, see the <a href="#report">report</a>)
@@ -558,7 +564,9 @@
           audio into stems first (for example with <a href="https://arxiv.org/abs/2211.08553">Hybrid Transformer Demucs</a>:
           vocals, bass, drums, other) and transcribing each would give one color per track, at the cost of a much larger
           download and several times the compute.</li>
-        <li><b>Microphone input</b>, for streaming end to end.</li>
+        <li><b>Lower microphone latency.</b> Mic input works, but notes trail the sound by about one model window
+          (2 s). The model runs 50–100× faster than real time, so it could run on overlapping windows every few hundred
+          milliseconds and keep only the frames that are already reliable.</li>
         <li><b>Pitch bends</b> in the MIDI, from the model's contour output.</li>
         <li><b>Safari and Firefox testing.</b></li>
         <li><b>Better model outputs.</b> That's where the remaining errors seem to be, but it means retraining Basic Pitch,

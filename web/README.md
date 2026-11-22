@@ -14,14 +14,23 @@ keyed by a hash of the file and the mode, so reopening a file is instant (`src/c
 
 Two modes: **Live** is the streaming HMM above; **Original** is Basic Pitch's own note creation with the melodia
 trick (`src/original.js`, a port of `output_to_notes_polyphonic` that gives the same notes as the Python code),
-which needs the whole file, so its notes come at the end. The page plays the file with a playhead that the roll
-follows (`src/playback.js`); the notes under it light up on the keyboard, and hovering or clicking a note shows
-its details. `report.html` sums up what we tried and why the site works this way.
+which needs the whole file, so its notes come at the end. The worker keeps the model's output, so the
+**pedalboard** (`src/params.js`, `src/knob.js`) can re-decode with other settings, or the other decoder, in
+milliseconds without running the model again.
+
+The transcribe tab works like a map: the roll fills the screen with controls floating over it. **Layers** shows
+the model's output before decoding and/or the notes. Playing follows the playhead (`src/playback.js`), and
+**Song / Notes / Both** plays the notes on a small synth over the song to compare (`src/synth.js`). **Mic**
+streams the microphone to the worker, which runs each model window as soon as its audio is in, so notes trail the
+sound by about one window (`src/mic.js`). Notes download as MIDI written like basic-pitch's (`src/midi.js`). The
+How to use, Report and About tabs explain the controls, what we tried and why (with charts from
+`src/report-data.json`), and credits.
 
 ```
 npm ci
 npm test        # windowing and timing vs Python, HMM and original notes vs the Python code, any window
-                # order gives the same notes, playback and note helpers, cache round trip, model smoke test
+                # order gives the same notes, MIDI, pedal knobs, playback, synth scheduling, mic resampling
+                # and WAV, chart helpers, cache round trip, model smoke test
 npm run build   # static site in dist/
 npm run serve   # serve dist/ on http://localhost:8123 with no special headers, like GitHub Pages
 ```

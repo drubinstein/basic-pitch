@@ -74,3 +74,8 @@ test('the view never runs past the ends of the file', () => {
   assert.equal(followT0({ ...view, t0: 5, t: 0.5, advance: 0, dt: 0.016 }), 0);
   assert.equal(followT0({ t0: 0, span: 200, duration: 100, t: 60, advance: 0, dt: 0.016 }), 0);
 });
+
+test('while recording, the live edge can sit near the right instead', () => {
+  assert.equal(followT0({ ...view, t: 40, advance: 0, dt: 0.016, anchor: 0.85 }), 40 - 0.85 * 10);
+  assert.equal(followT0({ ...view, t: 5, advance: 0.016, dt: 0.016, anchor: 0.85 }), 0);
+});

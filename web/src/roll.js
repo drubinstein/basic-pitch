@@ -10,7 +10,7 @@
 // clicking it reports it through `onNote` (for a tooltip); clicking empty space asks to seek there.
 import { FRAMES_PER_WINDOW, N_PITCHES, MIDI_OFFSET } from './pipeline.js';
 import { noteAt, soundingAt } from './notes.js';
-import { followT0 } from './playback.js';
+import { followT0, ANCHOR } from './playback.js';
 
 const LO = MIDI_OFFSET, HI = MIDI_OFFSET + N_PITCHES - 1;
 const MAX_PPS = 4000; // pixels per second at full zoom
@@ -30,6 +30,7 @@ export class PianoRoll {
   constructor(canvas, frameToTime, { onView = () => {}, onNote = () => {}, onSeek = () => {}, onSounding = () => {}, onFollow = () => {} } = {}) {
     Object.assign(this, { canvas, frameToTime, onView, onNote, onSeek, onSounding, onFollow, ctx: canvas.getContext('2d') });
     this.layers = { heat: true, notes: true }; // the model's output before decoding, and the notes
+    this.anchor = ANCHOR; // where the followed playhead settles, as a fraction of the view
     this.reset(0, 0);
     new ResizeObserver(() => this.#resize()).observe(canvas);
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.#readColors());
@@ -54,6 +55,15 @@ export class PianoRoll {
     this.selected = null;
     this.sounding = [];
     this.shown = null;
+    this.request();
+  }
+
+  // A recording grows: more audio and frames, keeping what's there and the zoom.
+  grow(duration, totalFrames) {
+    this.duration = duration;
+    this.totalFrames = totalFrames;
+    this.nWindows = Math.ceil(totalFrames / FRAMES_PER_WINDOW);
+    while (this.tiles.length < this.nWindows) this.tiles.push(null);
     this.request();
   }
 
@@ -92,7 +102,7 @@ export class PianoRoll {
   setPlayhead(t, motion = null) {
     this.playhead = t;
     if (motion && this.following && this.pps !== null && this.#plotWidth() > 0) {
-      this.t0 = followT0({ t0: this.t0, span: this.#plotWidth() / this.pps, t, duration: this.duration, ...motion });
+      this.t0 = followT0({ t0: this.t0, span: this.#plotWidth() / this.pps, t, duration: this.duration, anchor: this.anchor, ...motion });
     }
     this.request();
   }
@@ -100,7 +110,7 @@ export class PianoRoll {
   // Bring the playhead on screen if it isn't.
   reveal() {
     if (this.playhead === null || this.pps === null || this.#plotWidth() <= 0) return;
-    this.t0 = followT0({ t0: this.t0, span: this.#plotWidth() / this.pps, t: this.playhead, duration: this.duration, advance: 0, dt: 0 });
+    this.t0 = followT0({ t0: this.t0, span: this.#plotWidth() / this.pps, t: this.playhead, duration: this.duration, anchor: this.anchor, advance: 0, dt: 0 });
     this.request();
   }
 
