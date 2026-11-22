@@ -9,7 +9,7 @@ import { startMic, toWav } from './mic.js';
 import { noteName, noteHz, meanActivation } from './notes.js';
 import { toMidi, velocity } from './midi.js';
 import { renderReport } from './report.js';
-import { NotePlayer, mix } from './synth.js';
+import { NotePlayer, mix, PRESETS, preset } from './synth.js';
 import { LIVE, ORIGINAL, defaults, isDefault } from './params.js';
 import { createKnob, createSwitch } from './knob.js';
 
@@ -101,7 +101,7 @@ function decodeAgain() {
 }
 
 function buildControls() {
-  for (const unit of document.querySelectorAll('.unit')) {
+  for (const unit of document.querySelectorAll('.unit[data-mode]')) {
     const m = unit.dataset.mode, controls = [];
     unit.classList.toggle('on', m === mode);
     for (const def of DEFS[m]) {
@@ -308,7 +308,14 @@ async function open(name, blob, { useCache = isDefaultFor(mode) } = {}) {
 // AudioContext (made on the first play, which needs a click). ---
 
 let audioUrl = null, raf = 0, last = null, results = [], graph = null;
-let listen = ['song', 'notes', 'both'].includes(recall('listen')) ? recall('listen') : 'both';
+// The mix knob: -1 only the song, +1 only the notes; Song / Notes / Both in the player are presets.
+let balance = (() => {
+  const v = parseFloat(recall('balance'));
+  return Number.isFinite(v) ? Math.min(1, Math.max(-1, v)) : 0;
+})();
+const MIX = { key: 'balance', label: 'Song : Notes', min: -1, max: 1, step: 0.05, default: 0, hint: 'How loud the song is against the notes played by the synth',
+  format: (v) => { const g = mix(v); return `${Math.round(g.song * 100)} : ${Math.round(g.notes * 100)}`; } };
+let mixKnob = null;
 
 function loadAudio(blob) {
   audio.pause();
@@ -336,7 +343,7 @@ function audioGraph() {
 
 function applyMix() {
   if (!graph) return;
-  const g = mix(listen);
+  const g = mix(balance);
   graph.song.gain.value = g.song;
   graph.notes.gain.value = g.notes;
 }
@@ -350,10 +357,19 @@ function synthNotes() {
   })));
 }
 
-for (const input of document.querySelectorAll('input[name="listen"]')) {
-  input.checked = input.value === listen;
-  input.addEventListener('change', () => { listen = input.value; remember('listen', listen); applyMix(); });
+function setBalance(v, fromKnob = false) {
+  balance = v;
+  remember('balance', String(v));
+  applyMix();
+  for (const input of document.querySelectorAll('input[name="listen"]')) input.checked = input.value === preset(v);
+  if (!fromKnob) mixKnob?.set(v);
 }
+for (const input of document.querySelectorAll('input[name="listen"]')) {
+  input.checked = input.value === preset(balance);
+  input.addEventListener('change', () => setBalance(PRESETS[input.value]));
+}
+mixKnob = createKnob(MIX, balance, (v) => setBalance(v, true));
+document.querySelector('.unit.mix .knobs').append(mixKnob.root);
 
 function showTime(t) {
   const text = formatTime(t);

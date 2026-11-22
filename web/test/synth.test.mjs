@@ -2,7 +2,7 @@
 // song and the notes are mixed for each listening choice.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { byStart, startingIn, voiceGain, mix } from '../src/synth.js';
+import { byStart, startingIn, voiceGain, mix, PRESETS, preset } from '../src/synth.js';
 
 const notes = byStart([
   { t0: 2.0, t1: 2.5, pitch: 64, velocity: 80 },
@@ -29,9 +29,16 @@ test('louder notes play louder, and silence stays silent', () => {
   assert.ok(voiceGain(127) <= 0.25, 'room for a few voices at once');
 });
 
-test('song, notes or both', () => {
-  assert.deepEqual(mix('song'), { song: 1, notes: 0 });
-  assert.deepEqual(mix('notes'), { song: 0, notes: 1 });
-  const both = mix('both');
-  assert.ok(both.song > 0 && both.notes > 0);
+test('the mix crossfades from the song (-1) to the notes (+1) at equal power', () => {
+  assert.deepEqual(mix(-1), { song: 1, notes: 0 });
+  const close = (a, b) => Math.abs(a - b) < 1e-12;
+  const right = mix(1), even = mix(0), quarter = mix(-0.5);
+  assert.ok(close(right.song, 0) && close(right.notes, 1));
+  assert.ok(close(even.song, Math.SQRT1_2) && close(even.notes, Math.SQRT1_2));
+  assert.ok(quarter.song > quarter.notes && close(quarter.song ** 2 + quarter.notes ** 2, 1));
+});
+
+test('song, notes and both are presets of the mix', () => {
+  assert.deepEqual(PRESETS, { song: -1, both: 0, notes: 1 });
+  assert.deepEqual([-1, -0.4, 0, 0.6, 1].map(preset), ['song', 'both', 'both', 'both', 'notes']);
 });

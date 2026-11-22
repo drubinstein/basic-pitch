@@ -122,6 +122,8 @@
     .unit.on { opacity: 1; }
     .unit.live { background: linear-gradient(160deg, #3a7be6, #1b3f8c); width: 430px; }
     .unit.original { background: linear-gradient(160deg, #e8843a, #9a4612); width: 300px; }
+    .unit.mix { background: linear-gradient(160deg, #62626e, #2c2c34); width: 140px; opacity: 1; align-items: center; }
+    .unit.mix .knob .dial { width: 64px; height: 64px; }
     .cable { width: 40px; height: auto; align-self: center; }
     .cable path { fill: none; stroke: #0b0b0c; stroke-width: 6; stroke-linecap: round; }
     .knobs { display: grid; gap: 4px 2px; }
@@ -258,7 +260,7 @@
       <div id="tip" role="tooltip" hidden></div>
 
       <div class="float searchbar">
-        <label class="search" title="Open an audio file (or drop one anywhere)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V6l10-2v12" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="6.5" cy="18" r="2.5" fill="currentColor"/><circle cx="16.5" cy="16" r="2.5" fill="currentColor"/></svg><span id="status">Open or drop an audio file…</span><input id="file" type="file" accept="audio/*"></label>
+        <label class="search" title="Open an audio file (or drop one anywhere)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12v0M6 9v6M9 5v14M12 8v8M15 3v18M18 8v8M21 11v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span id="status">Open or drop an audio file…</span><input id="file" type="file" accept="audio/*"></label>
         <button id="download" class="icon" type="button" hidden title="Download MIDI (written like basic-pitch's, without pitch bends)" aria-label="Download MIDI"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <button id="again" class="icon" type="button" hidden title="Transcribe again" aria-label="Transcribe again"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </div>
@@ -267,14 +269,14 @@
           <label title="Streaming HMM decoder: notes appear while the file is transcribed, each as soon as it is final"><input type="radio" name="mode" value="live" checked> Live</label>
           <label title="Basic Pitch's own note creation with the melodia trick, as in the basic-pitch package: notes appear once the whole file is transcribed"><input type="radio" name="mode" value="original"> Original</label>
         </div>
-        <button id="controls" class="chip" type="button" aria-pressed="false" aria-controls="control-panel" title="Knobs for each decoder's settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 12 9 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Control panel</button>
+        <button id="controls" class="chip" type="button" aria-pressed="false" aria-controls="control-panel" title="Knobs for each decoder's settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v18M12 3v18M18 3v18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><rect x="3.5" y="13" width="5" height="3.5" rx="1.2" fill="currentColor"/><rect x="9.5" y="6" width="5" height="3.5" rx="1.2" fill="currentColor"/><rect x="15.5" y="10" width="5" height="3.5" rx="1.2" fill="currentColor"/></svg> Control panel</button>
         <button id="example" class="chip" type="button">Try an example</button>
         <button id="mic" class="chip" type="button" title="Transcribe from your microphone"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> <span>Mic</span></button>
       </div>
       <div id="stats" class="float stats"></div>
 
       <div class="float layers">
-        <button id="layers" class="fab" type="button" aria-expanded="false" aria-controls="layers-pop" title="Layers"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 4 9 5-9 5-9-5 9-5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m3 14 9 5 9-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg><span>Layers</span></button>
+        <button id="layers" class="fab" type="button" aria-expanded="false" aria-controls="layers-pop" title="Layers"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="6" y="7.5" width="6" height="2.5" rx="1" fill="currentColor"/><rect x="10" y="11" width="8" height="2.5" rx="1" fill="currentColor"/><rect x="6" y="14.5" width="5" height="2.5" rx="1" fill="currentColor"/></svg><span>Layers</span></button>
         <div id="layers-pop" class="pop" hidden>
           <label><input type="checkbox" data-layer="heat" checked> Model output <small>before decoding</small></label>
           <label><input type="checkbox" data-layer="notes" checked> Notes</label>
@@ -293,11 +295,11 @@
 
       <div class="float zoom">
         <div class="stack">
-          <button id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in (+)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-          <button id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out (−)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+          <button id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in (+)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m15.5 15.5 5 5M10.5 7.5v6M7.5 10.5h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+          <button id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out (−)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m15.5 15.5 5 5M7.5 10.5h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
         </div>
-        <button id="fit" type="button" aria-label="Show the whole file" title="Show the whole file (0)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-        <button id="follow" type="button" aria-pressed="false" aria-label="Follow the playhead" title="Follow the playhead"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+        <button id="fit" type="button" aria-label="Show the whole file" title="Show the whole file (0)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5v14M20 5v14M8 12h8M10.5 9.5 8 12l2.5 2.5M13.5 9.5 16 12l-2.5 2.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button id="follow" type="button" aria-pressed="false" aria-label="Follow the playhead" title="Follow the playhead"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 8v13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M6 3h8l-4 5z" fill="currentColor"/><path d="M14.5 14.5h6M18 12l2.5 2.5L18 17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </div>
     </div>
     <section id="control-panel" class="panel-board" aria-label="Control panel" hidden>
@@ -327,6 +329,11 @@
             <div class="name">Original<small>melodia trick</small></div>
             <button class="reset" type="button">reset</button>
           </div>
+        </div>
+        <svg class="cable" viewBox="0 0 40 120" aria-hidden="true"><path d="M0,80 C24,80 16,40 40,40"/></svg>
+        <div class="unit mix">
+          <div class="knobs"></div>
+          <div class="foot"><div class="name">Mix<small>song ↔ notes</small></div></div>
         </div>
       </div>
     </section>
@@ -367,7 +374,7 @@
         <tr><td>Drag, or scroll sideways</td><td>Pan</td></tr>
         <tr><td>Pinch, <kbd>ctrl</kbd>+scroll, or scroll</td><td>Zoom around the pointer</td></tr>
         <tr><td>Double-click (<kbd>shift</kbd> to zoom out)</td><td>Zoom in</td></tr>
-        <tr><td><kbd>0</kbd>, or the frame button at the bottom right</td><td>Show the whole file</td></tr>
+        <tr><td><kbd>0</kbd>, or the fit button at the bottom right</td><td>Show the whole file</td></tr>
         <tr><td>The <b>+</b> and <b>−</b> buttons</td><td>Zoom</td></tr>
         <tr><td><kbd>←</kbd> <kbd>→</kbd> · <kbd>+</kbd> <kbd>−</kbd></td><td>Pan · zoom</td></tr>
       </table>
@@ -378,8 +385,8 @@
       <table class="keys">
         <tr><td><kbd>space</kbd> or the play button</td><td>Play or pause</td></tr>
         <tr><td>Click empty space on the roll</td><td>Jump there</td></tr>
-        <tr><td>Pan while playing</td><td>Stop following the playhead (the target button at the bottom right brings it back)</td></tr>
-        <tr><td><b>Song</b> · <b>Notes</b> · <b>Both</b></td><td>Hear the original, the transcribed notes on a simple synth, or the notes over the song to compare</td></tr>
+        <tr><td>Pan while playing</td><td>Stop following the playhead (the playhead button at the bottom right brings it back)</td></tr>
+        <tr><td><b>Song</b> · <b>Notes</b> · <b>Both</b></td><td>Hear the original, the transcribed notes on a simple synth, or the notes over the song to compare. The <b>Mix</b> knob in the control panel sets anything in between.</td></tr>
       </table>
       <p>While playing, the view scrolls so the playhead stays a quarter of the way in, leaving most of the screen for
         what's coming. Notes under the playhead turn green and their keys light up on the keyboard at the left.</p>

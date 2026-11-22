@@ -1,5 +1,5 @@
 // Plays the transcribed notes with a simple synth, in time with the song, so the two can be compared
-// (song, notes, or both). Notes are { t0, t1, pitch, velocity } in seconds of the song. While
+// (a crossfade from the song to the notes). Notes are { t0, t1, pitch, velocity } in seconds of the song. While
 // playing, tick(t) with the song's time schedules the notes starting in the next LOOKAHEAD seconds.
 import { noteHz } from './notes.js';
 
@@ -19,8 +19,13 @@ export function startingIn(sorted, from, to) {
 // Peak gain of one voice for a MIDI velocity, quiet enough for chords.
 export const voiceGain = (velocity) => (velocity > 0 ? 0.22 * (Math.min(127, velocity) / 127) ** 1.5 : 0);
 
-// Gains for the song and the notes for each listening choice.
-export const mix = (listen) => (listen === 'song' ? { song: 1, notes: 0 } : listen === 'notes' ? { song: 0, notes: 1 } : { song: 0.8, notes: 0.8 });
+// The mix knob: -1 is only the song, +1 only the notes, an equal-power crossfade in between.
+export function mix(balance) {
+  const b = Math.min(1, Math.max(-1, balance)), a = ((b + 1) * Math.PI) / 4;
+  return b === -1 ? { song: 1, notes: 0 } : b === 1 ? { song: 0, notes: 1 } : { song: Math.cos(a), notes: Math.sin(a) };
+}
+export const PRESETS = { song: -1, both: 0, notes: 1 };
+export const preset = (balance) => (balance <= -1 ? 'song' : balance >= 1 ? 'notes' : 'both');
 
 export class NotePlayer {
   constructor(ctx, out) {
