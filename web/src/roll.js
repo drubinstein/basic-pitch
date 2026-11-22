@@ -82,7 +82,7 @@ export class PianoRoll {
   // (`advance`) and the wall time since then (`dt`) so the view can follow.
   setPlayhead(t, motion = null) {
     this.playhead = t;
-    if (motion && this.following && this.pps !== null) {
+    if (motion && this.following && this.pps !== null && this.#plotWidth() > 0) {
       this.t0 = followT0({ t0: this.t0, span: this.#plotWidth() / this.pps, t, duration: this.duration, ...motion });
     }
     this.request();
@@ -90,7 +90,7 @@ export class PianoRoll {
 
   // Bring the playhead on screen if it isn't.
   reveal() {
-    if (this.playhead === null || this.pps === null) return;
+    if (this.playhead === null || this.pps === null || this.#plotWidth() <= 0) return;
     this.t0 = followT0({ t0: this.t0, span: this.#plotWidth() / this.pps, t: this.playhead, duration: this.duration, advance: 0, dt: 0 });
     this.request();
   }
@@ -295,7 +295,7 @@ export class PianoRoll {
     c.width = Math.round(c.clientWidth * dpr);
     c.height = Math.round(c.clientHeight * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (this.pps !== null) this.#clamp();
+    if (this.pps !== null && c.clientWidth > GUTTER) this.#clamp(); // not while hidden in another tab
     this.request();
   }
 

@@ -7,6 +7,7 @@ import * as cache from './cache.js';
 import { Clock, formatTime } from './playback.js';
 import { noteName, noteHz, meanActivation } from './notes.js';
 import { toMidi, velocity } from './midi.js';
+import { renderReport } from './report.js';
 
 const $ = (id) => document.getElementById(id);
 const audio = $('audio'), clock = new Clock(audio);
@@ -30,6 +31,26 @@ const roll = new PianoRoll($('roll'), frameToTime, {
 window.pianoRoll = roll; // for scripted checks
 const setStatus = (text) => { $('status').textContent = text; };
 const setStats = (text) => { $('stats').textContent = text; };
+
+// --- Tabs: #transcribe (default), #guide, #report, #about. A link to anything inside a tab opens it. ---
+
+const TABS = ['transcribe', 'guide', 'report', 'about'];
+function route() {
+  const id = decodeURIComponent(location.hash.slice(1));
+  const target = id && !TABS.includes(id) ? document.getElementById(id) : null;
+  const name = target?.closest('.panel')?.id.replace('panel-', '') ?? (TABS.includes(id) ? id : 'transcribe');
+  for (const t of TABS) $(`panel-${t}`).hidden = t !== name;
+  for (const a of document.querySelectorAll('.tabs a')) {
+    if (a.dataset.tab === name) a.setAttribute('aria-current', 'page');
+    else a.removeAttribute('aria-current');
+  }
+  if (name === 'report') renderReport();
+  if (target) target.scrollIntoView();
+  else $(`panel-${name}`).scrollTop = 0;
+}
+addEventListener('hashchange', route);
+route();
+const showTranscribe = () => { if ($('panel-transcribe').hidden) location.hash = 'transcribe'; };
 
 // --- Modes: live (streaming HMM) or original (Basic Pitch's note creation, melodia trick). ---
 
@@ -89,6 +110,7 @@ const modeLabel = () => (mode === 'original' ? 'Original (melodia trick)' : 'Liv
 // blob: the file (a File, or the example fetched as a Blob).
 async function open(name, blob, { useCache = true } = {}) {
   const id = ++opened, stale = () => id !== opened;
+  showTranscribe();
   worker?.terminate();
   worker = null;
   if (current?.blob !== blob) loadAudio(blob);
@@ -235,7 +257,7 @@ addEventListener('pointerup', () => { scrubbing = false; });
 
 // Space plays and pauses, except where it means something already (buttons, text, radios).
 addEventListener('keydown', (e) => {
-  if (e.key !== ' ' || e.repeat || e.target.closest?.('button, textarea, select, label') || (e.target.tagName === 'INPUT' && e.target.type !== 'range')) return;
+  if (e.key !== ' ' || e.repeat || $('panel-transcribe').hidden || e.target.closest?.('button, textarea, select, label') || (e.target.tagName === 'INPUT' && e.target.type !== 'range')) return;
   e.preventDefault();
   toggle();
 });

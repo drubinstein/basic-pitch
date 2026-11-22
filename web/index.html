@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Basic Pitch Live</title>
-  <meta name="description" content="Audio-to-MIDI transcription with Basic Pitch, running in your browser with LiteRT.js.">
+  <link rel="icon" href="data:,">
+  <meta name="description" content="Audio-to-MIDI transcription with Basic Pitch, running in your browser with LiteRT.js, with a streaming decoder and a report on how it was built.">
   <!-- GitHub Pages can't send COOP/COEP headers; this service worker adds them so LiteRT.js can use threads. -->
   <script src="coi-serviceworker.min.js"></script>
   <style>
@@ -14,6 +15,8 @@
       --accent: #2f6fde; --accent-strong: #1d4fae; --heat: #e0782f;
       --roll-bg: #ffffff; --roll-black-key: #f1f1f3; --roll-grid: #e2e2e6; --roll-pending: rgba(127, 127, 135, 0.08);
       --key-white: #fbfbfc; --key-black: #3a3a40; --note-active: #12a150; --playhead: #d6402f;
+      --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+      --div-pos: #2a78d6; --div-neg: #e34948; --chart-grid: #e6e6e9; --chart-axis: #c3c2b7;
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -21,33 +24,51 @@
         --accent: #6f9cf0; --accent-strong: #a9c4f7; --heat: #f0a050;
         --roll-bg: #161618; --roll-black-key: #1d1d21; --roll-grid: #2a2a30; --roll-pending: rgba(160, 160, 170, 0.07);
         --key-white: #2a2a2f; --key-black: #0c0c0e; --note-active: #3ddc84; --playhead: #ff6b5b;
+        --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+        --div-pos: #3987e5; --div-neg: #e66767; --chart-grid: #2c2c30; --chart-axis: #45454c;
       }
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
     body { background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; display: flex; flex-direction: column; }
-    header { padding: 14px 16px 10px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
-    h1 { font-size: 17px; margin: 0 8px 0 0; font-weight: 650; }
-    .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    a { color: var(--accent); }
+    [hidden] { display: none !important; }
+
+    /* Top bar and tabs */
+    .top { padding: 12px 16px 0; display: flex; flex-wrap: wrap; gap: 6px 20px; align-items: flex-end; border-bottom: 1px solid var(--border); }
+    h1 { font-size: 17px; margin: 0 0 10px; font-weight: 650; }
+    .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+    .tabs a { padding: 8px 12px 9px; color: var(--text-muted); text-decoration: none; font-weight: 550; font-size: 14.5px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .tabs a:hover { color: var(--text); }
+    .tabs a[aria-current="page"] { color: var(--text); border-bottom-color: var(--accent); }
+    .tabs a:focus { outline: none; }
+    .tabs a:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 6px; }
+    .top .ext { margin: 0 0 10px auto; font-size: 13.5px; }
+    .panel { flex: 1; min-height: 0; }
+
+    /* Transcribe */
+    #panel-transcribe { display: flex; flex-direction: column; }
+    .controls { padding: 12px 16px 8px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     button, .file { font: inherit; font-size: 14px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
     button:hover, .file:hover { border-color: var(--accent); }
+    button:disabled { opacity: 0.5; cursor: default; }
     .file input { display: none; }
     #status { font-weight: 550; }
     .meta { padding: 0 16px 8px; display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--text-muted); font-size: 13px; }
-    button:disabled { opacity: 0.5; cursor: default; }
     .modes { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
     .modes label { font-size: 14px; padding: 6px 11px; cursor: pointer; }
     .modes label + label { border-left: 1px solid var(--border); }
     .modes input { position: absolute; opacity: 0; pointer-events: none; }
     .modes label:has(input:checked) { background: var(--accent); color: #fff; }
     .modes label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .hint { color: var(--text-muted); font-size: 13px; }
     .transport { padding: 0 16px 8px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 13px; }
     .transport #play { min-width: 64px; }
     .transport .clock { font-variant-numeric: tabular-nums; color: var(--text-muted); }
     #seek { flex: 1 1 240px; min-width: 160px; accent-color: var(--accent); }
     .playing { font-variant-numeric: tabular-nums; min-width: 9em; }
     .playing b { color: var(--note-active); font-weight: 650; }
-    main { flex: 1; min-height: 320px; padding: 0 16px 12px; display: flex; }
+    main { flex: 1; min-height: 320px; padding: 0 16px 14px; display: flex; }
     #stage { position: relative; flex: 1; display: flex; min-width: 0; }
     #roll { flex: 1; width: 100%; height: 100%; border: 1px solid var(--border); border-radius: 10px; touch-action: none; cursor: grab; outline: none; }
     #roll:active { cursor: grabbing; }
@@ -59,16 +80,91 @@
     #tip .tip-lag { color: var(--text-muted); }
     #drop { position: fixed; inset: 10px; z-index: 10; pointer-events: none; display: grid; place-items: center; border: 3px dashed var(--accent);
       border-radius: 16px; background: color-mix(in srgb, var(--accent) 12%, transparent); font-size: 20px; font-weight: 600; color: var(--accent-strong); }
-    footer { padding: 0 16px 14px; color: var(--text-muted); font-size: 12px; }
-    footer p { margin: 0 0 4px; }
-    a { color: var(--accent); }
     .link { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
-    [hidden] { display: none !important; }
+
+    /* Text tabs */
+    .doc { overflow-y: auto; font-size: 16px; line-height: 1.55; }
+    .doc article { max-width: 880px; margin: 0 auto; padding: 22px 16px 56px; }
+    .doc h2 { font-size: 24px; margin: 0 0 6px; }
+    .doc h3 { font-size: 18.5px; margin: 34px 0 8px; }
+    .doc p, .doc li { max-width: 72ch; }
+    .lede { color: var(--text-muted); margin-top: 0; }
+    .note { color: var(--text-muted); font-size: 14px; }
+    kbd { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px; background: var(--surface); }
+    .keys { border-collapse: collapse; font-size: 15px; }
+    .keys td { padding: 5px 14px 5px 0; vertical-align: top; border-bottom: 1px solid var(--border); }
+    .keys td:first-child { white-space: nowrap; }
+    .scroll { overflow-x: auto; margin: 12px 0; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+    .results { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+    .results th, .results td, .table-view th, .table-view td { padding: 6px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border); }
+    .results th:first-child, .results td:first-child, .table-view th:first-child, .table-view td:first-child { text-align: left; white-space: normal; min-width: 11em; }
+    .results thead th, .table-view th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
+    .results tbody tr:last-child td { border-bottom: 0; }
+    .results tr.bar td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+    .results tr.shipped td:first-child { font-weight: 650; }
+    .results thead th { vertical-align: bottom; line-height: 1.25; }
+    .results tr.group td { text-align: left; font-weight: 650; color: var(--text); background: var(--bg); padding-top: 9px; }
+    .results tr.group span { font-weight: 400; color: var(--text-muted); margin-left: 6px; }
+    .results td.dim { color: var(--text-muted); }
+    .table-title { margin: 18px 0 2px; font-size: 15.5px; }
+    .table-view { margin: 6px 0 0; font-size: 14px; }
+    .table-view summary { cursor: pointer; color: var(--accent); }
+    .table-view table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+    .refs li { margin-bottom: 4px; }
+    figure.diagram { margin: 14px 0; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow-x: auto; }
+    figure.diagram svg { display: block; max-width: 100%; height: auto; min-width: 560px; }
+    figure.diagram figcaption { font-size: 13.5px; color: var(--text-muted); margin-top: 6px; }
+    .diagram .state { fill: var(--surface); stroke: var(--text-muted); stroke-width: 1.5; }
+    .diagram .state.on { fill: color-mix(in srgb, var(--note-active) 16%, var(--surface)); stroke: var(--note-active); }
+    .diagram text { fill: var(--text); font: 13px system-ui, sans-serif; }
+    .diagram .edge { fill: none; stroke: var(--text-muted); stroke-width: 1.4; }
+    .diagram .edge-label { fill: var(--text-muted); font-size: 11.5px; }
+
+    /* Charts */
+    .chart-card { margin: 14px 0 22px; padding: 14px 14px 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+    .chart-card h4 { margin: 0 0 2px; font-size: 15.5px; }
+    .chart-card .sub { margin: 0 0 10px; color: var(--text-muted); font-size: 13.5px; }
+    .chart-controls { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 8px; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .seg button { border: 0; border-radius: 0; font-size: 13px; padding: 5px 10px; background: transparent; }
+    .seg button + button { border-left: 1px solid var(--border); }
+    .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+    .legend { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 0; margin: 0 0 6px; font-size: 13px; color: var(--text-muted); }
+    .legend .key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+    .legend .key.dot { border-radius: 50%; width: 10px; height: 10px; }
+    .chart-caption { margin: 0 0 6px; font-size: 14px; }
+    .chart { position: relative; }
+    .chart svg { display: block; overflow: visible; }
+    .chart .grid { stroke: var(--chart-grid); stroke-width: 1; }
+    .chart .axis { stroke: var(--chart-axis); stroke-width: 1; }
+    .chart .tick { fill: var(--text-muted); font: 11.5px system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+    .chart .value { fill: var(--text); font: 600 12px system-ui, sans-serif; }
+    .chart .ref { stroke: var(--text); stroke-width: 1; opacity: 0.55; }
+    .chart .ref-label { fill: var(--text-muted); font: 11.5px system-ui, sans-serif; }
+    .chart .hit { fill: transparent; }
+    .chart .mark.on { filter: brightness(1.15); stroke: var(--text); stroke-width: 1; }
+    .chart .mark:focus { outline: none; stroke: var(--text); stroke-width: 1.5; }
+    .chart .dot { opacity: 0.75; stroke: var(--surface); stroke-width: 1; }
+    .chart .ring { fill: none; stroke: var(--text); stroke-width: 2; pointer-events: none; }
+    .chart .cursor { fill: var(--text); opacity: 0.12; pointer-events: none; }
+    .chart-tip { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 3; background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 6px 9px; font-size: 12.5px; line-height: 1.4; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16); max-width: 300px; color: var(--text-muted); }
+    .chart-tip .v { color: var(--text); font-weight: 650; font-size: 14px; }
   </style>
 </head>
 <body>
-  <header>
+  <header class="top">
     <h1>Basic Pitch Live</h1>
+    <nav class="tabs" aria-label="Sections">
+      <a href="#transcribe" data-tab="transcribe">Transcribe</a>
+      <a href="#guide" data-tab="guide">How to use</a>
+      <a href="#report" data-tab="report">Report</a>
+      <a href="#about" data-tab="about">About</a>
+    </nav>
+    <a class="ext" href="https://basicpitch.spotify.com/">Spotify's original Basic Pitch demo ↗</a>
+  </header>
+
+  <section id="panel-transcribe" class="panel" aria-label="Transcribe">
     <div class="controls">
       <label class="file">Open audio…<input id="file" type="file" accept="audio/*"></label>
       <button id="example" type="button">Try an example</button>
@@ -79,38 +175,286 @@
       <button id="fit" type="button">Fit</button>
       <button id="again" type="button" hidden>Run again</button>
       <button id="download" type="button" hidden title="The notes as a MIDI file, written like basic-pitch's (without pitch bends)">Download MIDI</button>
+      <span class="hint">Drop a file anywhere · <a href="#guide">how to use</a></span>
     </div>
-  </header>
-  <div class="meta">
-    <span id="status">Open an audio file or drop one anywhere on this page. It stays on your machine.</span>
-    <span id="stats"></span>
-  </div>
-  <div id="transport" class="transport" hidden>
-    <button id="play" type="button">Play</button>
-    <span class="clock"><span id="time">0:00.0</span> / <span id="total">0:00.0</span></span>
-    <input id="seek" type="range" min="0" max="1" step="0.01" value="0" aria-label="Playback position">
-    <span class="playing">Playing: <b id="now">–</b></span>
-    <button id="follow" type="button" hidden>Follow playhead</button>
-  </div>
-  <main>
-    <div id="stage">
-      <canvas id="roll" tabindex="0" aria-label="Piano roll of transcribed notes"></canvas>
-      <div id="tip" role="tooltip" hidden></div>
+    <div class="meta">
+      <span id="status">Open an audio file or drop one anywhere on this page. It stays on your machine.</span>
+      <span id="stats"></span>
     </div>
-  </main>
+    <div id="transport" class="transport" hidden>
+      <button id="play" type="button">Play</button>
+      <span class="clock"><span id="time">0:00.0</span> / <span id="total">0:00.0</span></span>
+      <input id="seek" type="range" min="0" max="1" step="0.01" value="0" aria-label="Playback position">
+      <span class="playing">Playing: <b id="now">–</b></span>
+      <button id="follow" type="button" hidden>Follow playhead</button>
+    </div>
+    <main>
+      <div id="stage">
+        <canvas id="roll" tabindex="0" aria-label="Piano roll of transcribed notes"></canvas>
+        <div id="tip" role="tooltip" hidden></div>
+      </div>
+    </main>
+  </section>
+
+  <section id="panel-guide" class="panel doc" aria-label="How to use" hidden>
+    <article>
+      <h2>How to use</h2>
+      <p class="lede">Everything runs in your browser. Audio never leaves your machine.</p>
+
+      <h3>Open a file</h3>
+      <p>Use <b>Open audio…</b>, drop a file anywhere on the page, or press <b>Try an example</b> (vocadito track 10, a
+        sung melody). WAV, MP3, AAC, FLAC and Ogg work, depending on what your browser can decode.</p>
+
+      <h3>Live or Original</h3>
+      <p><b>Live</b> makes notes with a streaming decoder (a hidden Markov model, see the <a href="#report">report</a>)
+        while the model runs, so notes appear as soon as each one is final. <b>Original</b> uses Basic Pitch's own note
+        creation, exactly as the <code>basic-pitch</code> package does it with its default settings. That method finds
+        onset peaks across the file and then uses the <i>melodia trick</i>: it repeatedly takes the strongest leftover
+        activation anywhere in the file and traces it forwards and backwards in time into a note
+        (<a href="https://ar5iv.labs.arxiv.org/html/2203.09893#S3.p7">“Posteriorgram post-processing”, section 3 of the Basic Pitch paper</a>;
+        the name comes from <a href="https://doi.org/10.1109/TASL.2012.2188515">Melodia</a>, a melody extractor that
+        builds pitch contours the same way; <a href="https://github.com/spotify/basic-pitch/blob/main/basic_pitch/note_creation.py">code</a>).
+        It needs the whole file, so its notes come at the end. Switching modes keeps the music playing.</p>
+
+      <h3>Move around</h3>
+      <table class="keys">
+        <tr><td>Drag, or scroll sideways</td><td>Pan</td></tr>
+        <tr><td>Pinch, <kbd>ctrl</kbd>+scroll, or scroll</td><td>Zoom around the pointer</td></tr>
+        <tr><td>Double-click (<kbd>shift</kbd> to zoom out)</td><td>Zoom in</td></tr>
+        <tr><td><kbd>0</kbd> or <b>Fit</b></td><td>Show the whole file</td></tr>
+        <tr><td><kbd>←</kbd> <kbd>→</kbd> · <kbd>+</kbd> <kbd>−</kbd></td><td>Pan · zoom</td></tr>
+      </table>
+      <p>Whatever is on screen is transcribed first. Shaded stretches aren't transcribed yet.</p>
+
+      <h3>Listen</h3>
+      <table class="keys">
+        <tr><td><kbd>space</kbd> or <b>Play</b></td><td>Play or pause</td></tr>
+        <tr><td>Seek bar, or click empty space on the roll</td><td>Jump there</td></tr>
+        <tr><td>Pan while playing</td><td>Stop following the playhead (<b>Follow playhead</b> brings it back)</td></tr>
+      </table>
+      <p>While playing, the view scrolls so the playhead stays a quarter of the way in, leaving most of the screen for
+        what's coming. Notes under the playhead turn green, their keys light up on the keyboard at the left, and
+        <b>Playing</b> lists them.</p>
+
+      <h3>Notes</h3>
+      <p>Hover a note for its name, MIDI number, frequency and timing. Click to pin it; <kbd>esc</kbd> or a click
+        elsewhere clears it. In Live mode the tooltip also shows the decoder lag: how long after the note began the
+        decoder was sure of its start.</p>
+
+      <h3>Save</h3>
+      <p><b>Download MIDI</b> writes the notes the way <code>basic-pitch</code> does (120 bpm, Electric Piano 1,
+        velocity from how strong the note is), without pitch bends. Finished results are kept in this browser, per file
+        and mode, so reopening a file is instant; <b>Run again</b> redoes it. Saved results:
+        <button id="forget" class="link" type="button">clear them</button>.</p>
+    </article>
+  </section>
+
+  <section id="panel-report" class="panel doc" aria-label="Report" hidden>
+    <article>
+      <h2>Streaming Basic Pitch: what we tried, and why</h2>
+      <p class="lede">How we got notes out of Basic Pitch while the audio comes in, what the numbers said, and why the
+        site works the way it does. November 2026.</p>
+
+      <h3>The problem</h3>
+      <p>The Basic Pitch model already runs window by window, so it can stream. The note creation step after it can't:
+        it finds onset peaks across the file, and the <a href="https://ar5iv.labs.arxiv.org/html/2203.09893#S3.p7">melodia
+        trick</a> repeatedly takes the strongest leftover activation anywhere in the file. So notes only exist once the
+        whole file is in. The goal was notes as the audio arrives, without retraining Basic Pitch.</p>
+
+      <h3>From a traceback length to an HMM</h3>
+      <p>We started by treating note creation like a Viterbi decoder with a fixed traceback length, the way streaming
+        decoders for error-correcting codes work: keep the best explanation of the audio so far for every possible
+        current state, and once the explanations agree about a frame, or after a fixed delay at the latest, commit to it.
+        A short look through the literature showed that this generalizes to a hidden Markov model decoded with the
+        <a href="https://doi.org/10.1109/PROC.1973.9030">Viterbi algorithm</a>, run online, where a decision is final as
+        soon as all surviving paths merge (<a href="https://doi.org/10.1007/978-3-540-74126-8_23">Šrámek et al.</a>) and
+        the traceback length becomes a cap on how long a decision can wait. HMMs with attack and sustain states are also
+        an established way to turn frame-by-frame pitch estimates into notes
+        (<a href="https://doi.org/10.1109/ASPAA.2005.1540233">Ryynänen &amp; Klapuri</a>,
+        <a href="https://doi.org/10.1155/2007/48317">Poliner &amp; Ellis</a>).</p>
+
+      <h3>What an HMM is</h3>
+      <p>A hidden Markov model describes something you can't observe directly as a chain of states. Here, for each of
+        the 88 piano pitches, the hidden state in each frame (11.6 ms) says whether that pitch is off, in the first few
+        frames of a note (attack), held (sustain), or in a short dip inside a note (gap). The model says two things:
+        how likely each move from one state to the next is, and how well each state explains what Basic Pitch reports for
+        that frame (its note and onset activations). The Viterbi algorithm finds the single most likely sequence of states;
+        each run from attack through sustain is a note.</p>
+      <figure class="diagram">
+        <svg viewBox="0 0 640 170" role="img" aria-label="The states for one pitch: off, attack 1 to m, sustain and gap, with the moves between them">
+          <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="var(--text-muted)"/></marker></defs>
+          <rect class="state" x="10" y="62" width="70" height="36" rx="8"/><text x="45" y="85" text-anchor="middle">Off</text>
+          <rect class="state on" x="130" y="62" width="80" height="36" rx="8"/><text x="170" y="85" text-anchor="middle">Attack 1</text>
+          <text x="245" y="85" text-anchor="middle">…</text>
+          <rect class="state on" x="280" y="62" width="80" height="36" rx="8"/><text x="320" y="85" text-anchor="middle">Attack m</text>
+          <rect class="state on" x="410" y="62" width="80" height="36" rx="8"/><text x="450" y="85" text-anchor="middle">Sustain</text>
+          <rect class="state on" x="545" y="62" width="80" height="36" rx="8"/><text x="585" y="85" text-anchor="middle">Gap 1…g</text>
+          <path class="edge" d="M80,80H128" marker-end="url(#arrow)"/><text class="edge-label" x="104" y="74" text-anchor="middle">onset</text>
+          <path class="edge" d="M210,80H232" marker-end="url(#arrow)"/><path class="edge" d="M258,80H278" marker-end="url(#arrow)"/>
+          <path class="edge" d="M360,80H408" marker-end="url(#arrow)"/>
+          <path class="edge" d="M490,74H543" marker-end="url(#arrow)"/><path class="edge" d="M545,88H492" marker-end="url(#arrow)"/>
+          <text class="edge-label" x="517" y="68" text-anchor="middle">dip</text><text class="edge-label" x="517" y="102" text-anchor="middle">back</text>
+          <path class="edge" d="M440,62C400,8 210,8 172,60" marker-end="url(#arrow)"/><text class="edge-label" x="305" y="24" text-anchor="middle">re-strike: a new note at the same pitch</text>
+          <path class="edge" d="M450,98C420,160 80,160 50,100" marker-end="url(#arrow)"/>
+          <path class="edge" d="M585,98C560,168 90,166 58,100" marker-end="url(#arrow)"/><text class="edge-label" x="320" y="152" text-anchor="middle">note ends</text>
+        </svg>
+        <figcaption>One pitch's states. Green states are “note on”. Each state can also stay where it is for another frame.</figcaption>
+      </figure>
+      <p>The chain is what makes it better than a threshold: a flicker in the activation can't make a new note unless an
+        onset (or very strong evidence) starts one, and a short dip inside a held note stays one note.</p>
+      <p><b>Running it as the audio arrives:</b> at each new frame, Viterbi keeps one best path into each state. Followed
+        back, those paths usually join within a few frames; everything before the join can't change any more, so it's
+        final. That is the decoder lag shown in the note tooltips. If they haven't joined after 100 frames (1.16 s), the
+        decoder commits to the best path anyway. That cap is the original traceback length.</p>
+
+      <h3>What we tried</h3>
+      <ul>
+        <li><b>A fair baseline.</b> The original note creation was tuned too (per dataset, on the dev halves). Tuned, it
+          gains a lot: onset threshold 0.625, frame threshold 0.3, minimum length 7, energy tolerance 4, and the melodia
+          trick off.</li>
+        <li><b>Tuning the HMM.</b> Hill climbing gave all the gains. A PufferLib Protein sweep with latency as the cost
+          never beat the starting parameters at the same latency. Per-register parameters didn't carry over from dev to
+          test, and stronger re-strike handling made things worse.</li>
+        <li><b>A learned decoder</b> (an RNN, <a href="#rnn">below</a>).</li>
+        <li><b>A ceiling check.</b> The HMM tuned directly on the vocadito test tracks, to see how good any HMM tuning
+          could get.</li>
+      </ul>
+
+      <h3>Results</h3>
+      <p>Test halves of GuitarSet (guitar), MAESTRO (piano) and vocadito (singing). F is mir_eval's note F-measure with
+        offsets; Fno ignores offsets. A decoder “beats” the tuned original on a track when it scores strictly higher.
+        The onset delay is the median time from a note's start until the decoder has committed to it.</p>
+      <p>We didn't test on <a href="https://zenodo.org/records/4599666">Slakh2100</a> (multi-instrument mixes rendered
+        from MIDI): it comes as a single 104 GB archive, too big to download and unpack for this round. It's in future
+        work.</p>
+
+      <div class="chart-card">
+        <h4>Share of test tracks where each decoder beats the tuned original</h4>
+        <p class="sub">The goal was 95%. Hover a bar for the scores behind it.</p>
+        <div id="chart-beats"></div>
+      </div>
+
+      <h4 class="table-title">All results, by dataset</h4>
+      <p class="note">Mean scores over each dataset's test tracks. “Tracks beaten” compares each track's score with the
+        tuned original's on the same track.</p>
+      <div id="results-table"></div>
+
+      <div class="chart-card">
+        <h4>Track by track: decoder score minus the tuned original's</h4>
+        <p class="sub">Each column is one test track. Hover for its name and scores.</p>
+        <div id="chart-tracks"></div>
+      </div>
+
+      <p>Then we redid the vocadito sweep with the share of tracks won as the objective, against a re-tuned original,
+        and ran the ceiling check: the same sweep, tuned and scored on the test tracks themselves.</p>
+      <div class="scroll">
+        <table class="results">
+          <thead><tr><th>Streaming HMM, scored on the 20 vocadito test tracks</th><th>Fno<br>(onsets)</th><th>F<br>(with offsets)</th><th>Tracks beaten<br>on Fno</th><th>Tracks beaten<br>on F</th><th>Onset delay<br>(median)</th></tr></thead>
+          <tbody>
+            <tr class="bar"><td>Original, re-tuned on dev (the bar)</td><td>.563</td><td>.387</td><td>–</td><td>–</td><td>whole file</td></tr>
+            <tr><td>Tuned on dev, ~0 ms budget</td><td>.555</td><td>.410</td><td>30%</td><td>60%</td><td>12 ms</td></tr>
+            <tr><td>Tuned on dev, ~50 ms budget</td><td>.578</td><td>.429</td><td>60%</td><td>85%</td><td>46 ms</td></tr>
+            <tr><td>Tuned on dev, ~100 ms budget</td><td>.580</td><td>.429</td><td>65%</td><td>75%</td><td>70 ms</td></tr>
+            <tr><td>Tuned on the test tracks themselves (ceiling)</td><td>.584</td><td>.443</td><td>80%</td><td>85%</td><td>104 ms</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="chart-card">
+        <h4>Every HMM setting we tried on vocadito</h4>
+        <p class="sub">686 settings from the two sweeps. More delay barely helps past about 50 ms. Scored on the test
+          tracks, no setting reaches 95%, not even ones tuned on those tracks. Hover a dot for its scores.</p>
+        <div id="chart-sweep"></div>
+      </div>
+
+      <h3 id="rnn">The RNN option</h3>
+      <p><b>Why it was attractive.</b> The HMM looks at each pitch on its own, so it can't use what the other pitches
+        are doing: the octave above, the rest of a chord, harmonics, or a string that's still ringing when it's struck
+        again. A small recurrent network reading all 88 pitches' note and onset activations can, and a few frames of
+        look-ahead (a fixed delay, like the traceback length) lets it see a note's attack before committing.</p>
+      <p><b>What we built.</b> Per-pitch convolutions plus a 128-unit GRU across pitches, trained on a held-out split of
+        GuitarSet, MAESTRO and vocadito for about 30 minutes on a CPU, with 0, 4 or 8 frames (0, 46 or 93 ms) of
+        look-ahead, then its decoding thresholds tuned on held-out tracks.</p>
+      <p><b>What happened.</b> It lost to the tuned original on most tracks. With 4 frames of look-ahead it beat it on
+        46% of GuitarSet tracks (Fno) but on 9% of MAESTRO and 1 of 20 vocadito tracks (vocadito Fno .475 against .559).
+        No look-ahead and 8 frames did worse. Half an hour on a CPU is far too little training for a model like this.</p>
+      <p><b>Why we stopped there.</b> The ceiling check says even an HMM tuned on the very tracks it's scored on beats
+        the tuned original on only 80% (Fno) and 85% (F) of vocadito tracks. A learned decoder could only do better by
+        fixing errors the HMM structurally can't, the cross-pitch ones, and we don't yet know that those make up most of
+        what's left. Different decoders reading the same model outputs land at about the same score, which points at the
+        model's outputs rather than the decoding. A real attempt needs a GPU run of hours, more held-out labelled audio
+        (for example Slakh2100's test split), a training loss closer to note-level F, and the same track-by-track check.</p>
+
+      <h3>Why we went with what we did</h3>
+      <ul>
+        <li><b>The streaming HMM is the Live mode.</b> It makes notes while the audio comes in, typically within a few
+          frames of their start. It is far better than the original's defaults and close to the tuned original: ahead on
+          vocadito, behind on MAESTRO Fno (.748 vs .774) and GuitarSet F (.600 vs .636, mostly re-strikes of ringing
+          strings). Tuned per dataset, it pulls ahead on MAESTRO too.</li>
+        <li><b>It still uses its starting parameters.</b> The tuned sets are per dataset, add about 100 ms, and gain 0.01
+          to 0.04 Fno. There is no single tuned set yet that's better everywhere.</li>
+        <li><b>No learned decoder yet</b>, for the reasons above.</li>
+        <li><b>Original mode stays for comparison.</b> It is a line-by-line port of
+          <code>output_to_notes_polyphonic</code> with <code>predict()</code>'s defaults, melodia trick included, and
+          gives the same notes as the Python code on the test fixtures. Its MIDI files match basic-pitch's notes and
+          velocities.</li>
+        <li><b>The site works like a map.</b> Whatever is on screen is transcribed first. Each run of windows starts one
+          window early so its notes match decoding from the start, the decoder keeps only 100 frames of history, and
+          finished results are cached in the browser. On a 10-minute file, jumping around gave exactly the same 1,759
+          notes as going front to back, at about 97× real time on 4 threads.</li>
+      </ul>
+
+      <h3>Future work</h3>
+      <ul>
+        <li><b>Train the learned decoder properly</b>: on a GPU, with more held-out labelled audio, judged by the same
+          track-by-track check. It's the one option here that can fix cross-pitch errors.</li>
+        <li><b>One tuned HMM parameter set</b> that works across instruments, instead of one per dataset.</li>
+        <li><b>Ceiling checks on GuitarSet and MAESTRO</b> (each guitar trial takes 20–120 s).</li>
+        <li><b>Slakh2100</b>, for multi-instrument music: stream only the test mixes and their MIDI out of the 104 GB
+          archive instead of downloading all of it.</li>
+        <li><b>Color-coded instrument tracks.</b> Basic Pitch doesn't know which instrument played a note. Separating the
+          audio into stems first (for example with <a href="https://arxiv.org/abs/2211.08553">Hybrid Transformer Demucs</a>:
+          vocals, bass, drums, other) and transcribing each would give one color per track, at the cost of a much larger
+          download and several times the compute.</li>
+        <li><b>Microphone input</b>, for streaming end to end.</li>
+        <li><b>Pitch bends</b> in the MIDI, from the model's contour output.</li>
+        <li><b>Safari and Firefox testing.</b></li>
+        <li><b>Better model outputs.</b> That's where the remaining errors seem to be, but it means retraining Basic Pitch,
+          which was out of scope.</li>
+      </ul>
+
+      <h3>References</h3>
+      <ol class="refs">
+        <li>R. M. Bittner, J. J. Bosch, D. Rubinstein, G. Meseguer-Brocal, S. Ewert. <a href="https://arxiv.org/abs/2203.09893">A Lightweight Instrument-Agnostic Model for Polyphonic Note Transcription and Multipitch Estimation</a>. ICASSP 2022 (note creation: <a href="https://ar5iv.labs.arxiv.org/html/2203.09893#S3.p7">section 3, “Posteriorgram post-processing”</a>).</li>
+        <li>J. Salamon, E. Gómez. <a href="https://doi.org/10.1109/TASL.2012.2188515">Melody Extraction From Polyphonic Music Signals Using Pitch Contour Characteristics</a>. IEEE TASLP, 2012 (Melodia).</li>
+        <li>G. D. Forney. <a href="https://doi.org/10.1109/PROC.1973.9030">The Viterbi Algorithm</a>. Proceedings of the IEEE, 1973.</li>
+        <li>R. Šrámek, B. Brejová, T. Vinař. <a href="https://doi.org/10.1007/978-3-540-74126-8_23">On-Line Viterbi Algorithm for Analysis of Long Biological Sequences</a>. WABI 2007.</li>
+        <li>M. Ryynänen, A. Klapuri. <a href="https://doi.org/10.1109/ASPAA.2005.1540233">Polyphonic Music Transcription Using Note Event Modeling</a>. WASPAA 2005.</li>
+        <li>G. E. Poliner, D. P. W. Ellis. <a href="https://doi.org/10.1155/2007/48317">A Discriminative Model for Polyphonic Piano Transcription</a>. EURASIP JASP, 2007.</li>
+        <li>S. Rouard, F. Massa, A. Défossez. <a href="https://arxiv.org/abs/2211.08553">Hybrid Transformers for Music Source Separation</a>. ICASSP 2023.</li>
+      </ol>
+    </article>
+  </section>
+
+  <section id="panel-about" class="panel doc" aria-label="About" hidden>
+    <article>
+      <h2>About</h2>
+      <p>Basic Pitch Live runs Spotify's <a href="https://github.com/spotify/basic-pitch">Basic Pitch</a> transcription
+        model in your browser with <a href="https://ai.google.dev/edge/litert/web">LiteRT.js</a>, and turns its output
+        into notes with a streaming decoder while it runs. Audio never leaves your machine; finished results are saved in
+        this browser only.</p>
+      <ul>
+        <li><a href="https://basicpitch.spotify.com/">Spotify's original Basic Pitch demo</a></li>
+        <li>The paper: <a href="https://arxiv.org/abs/2203.09893">A Lightweight Instrument-Agnostic Model for Polyphonic Note Transcription and Multipitch Estimation</a> (ICASSP 2022)</li>
+        <li><a href="#report">The report</a>: what we tried for streaming, and why the site works this way</li>
+        <li><a href="https://github.com/drubinstein/basic-pitch/tree/main/web">Source for this site</a></li>
+      </ul>
+      <p class="note">The example is track 10 of the vocadito dataset of solo singing.</p>
+    </article>
+  </section>
+
   <div id="drop" hidden>Drop an audio file to transcribe it</div>
   <audio id="audio" preload="auto"></audio>
-  <footer>
-    <p>Drag or scroll sideways to pan · pinch, ctrl+scroll or scroll to zoom · double-click to zoom in · 0 to fit ·
-    space to play or pause · click empty space to jump there · hover or click a note for details.
-    Whatever is on screen is transcribed first.</p>
-    <p><b>Live</b> makes notes with a streaming HMM as the model runs; <b>Original</b> uses Basic Pitch's own note
-    creation with the melodia trick once the whole file is in. <a href="report.html">What we tried, and why</a> ·
-    Spotify's <a href="https://basicpitch.spotify.com/">original Basic Pitch demo</a>.</p>
-    <p>Model: <a href="https://github.com/spotify/basic-pitch">Basic Pitch</a> (Spotify) on LiteRT.js.
-    Example: vocadito track 10. Results are saved in this browser (<button id="forget" class="link" type="button">clear</button>).
-    <a href="https://github.com/drubinstein/basic-pitch/tree/main/web">Source</a></p>
-  </footer>
   <script type="module" src="app.js"></script>
 </body>
 </html>
