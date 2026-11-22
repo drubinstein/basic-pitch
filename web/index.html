@@ -104,29 +104,29 @@
       .zoom { bottom: 150px; }
     }
     .chip svg { width: 16px; height: 16px; vertical-align: -3px; margin-right: 2px; }
-    #pedals[aria-pressed="true"] { background: var(--accent); color: #fff; }
+    #controls[aria-pressed="true"] { background: var(--accent); color: #fff; }
     #mic.recording { background: #d6402f; color: #fff; animation: pulse 1.6s ease-in-out infinite; }
     @keyframes pulse { 50% { box-shadow: 0 0 0 6px rgba(214, 64, 47, 0.25); } }
     @media (prefers-reduced-motion: reduce) { #mic.recording { animation: none; } }
 
-    /* Pedalboard */
-    .board { flex: none; background: repeating-linear-gradient(90deg, #26262a 0 2px, #222226 2px 6px); border-top: 1px solid #111; color: #ececef; padding: 8px 16px 14px; overflow-x: auto; }
-    .board-head { display: flex; gap: 12px; align-items: baseline; margin-bottom: 8px; font-size: 13px; color: #b9b9c0; }
-    .board-head b { color: #fff; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase; }
-    .board-head span { flex: 1; }
-    #board-close { background: none; border: 0; color: #b9b9c0; font-size: 22px; line-height: 1; padding: 0 4px; box-shadow: none; }
-    #board-close:hover { color: #fff; }
-    .pedals { display: flex; align-items: stretch; min-width: max-content; }
-    .pedal { border-radius: 14px; padding: 10px 14px 10px; display: flex; flex-direction: column; gap: 6px; position: relative;
+    /* Control panel */
+    .panel-board { flex: none; background: repeating-linear-gradient(90deg, #26262a 0 2px, #222226 2px 6px); border-top: 1px solid #111; color: #ececef; padding: 8px 16px 14px; overflow-x: auto; }
+    .panel-head { display: flex; gap: 12px; align-items: baseline; margin-bottom: 8px; font-size: 13px; color: #b9b9c0; }
+    .panel-head b { color: #fff; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase; }
+    .panel-head span { flex: 1; }
+    #panel-close { background: none; border: 0; color: #b9b9c0; font-size: 22px; line-height: 1; padding: 0 4px; box-shadow: none; }
+    #panel-close:hover { color: #fff; }
+    .units { display: flex; align-items: stretch; min-width: max-content; }
+    .unit { border-radius: 14px; padding: 10px 14px 10px; display: flex; flex-direction: column; gap: 6px; position: relative;
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 -2px 0 rgba(0, 0, 0, 0.25), 0 8px 16px rgba(0, 0, 0, 0.55); opacity: 0.82; transition: opacity 0.15s; }
-    .pedal.on { opacity: 1; }
-    .pedal.live { background: linear-gradient(160deg, #3a7be6, #1b3f8c); width: 430px; }
-    .pedal.original { background: linear-gradient(160deg, #e8843a, #9a4612); width: 300px; }
+    .unit.on { opacity: 1; }
+    .unit.live { background: linear-gradient(160deg, #3a7be6, #1b3f8c); width: 430px; }
+    .unit.original { background: linear-gradient(160deg, #e8843a, #9a4612); width: 300px; }
     .cable { width: 40px; height: auto; align-self: center; }
     .cable path { fill: none; stroke: #0b0b0c; stroke-width: 6; stroke-linecap: round; }
     .knobs { display: grid; gap: 4px 2px; }
-    .pedal.live .knobs.main { grid-template-columns: repeat(6, 1fr); }
-    .pedal.original .knobs.main { grid-template-columns: repeat(4, 1fr); }
+    .unit.live .knobs.main { grid-template-columns: repeat(6, 1fr); }
+    .unit.original .knobs.main { grid-template-columns: repeat(4, 1fr); }
     .knobs.more { grid-template-columns: repeat(6, 1fr); padding-top: 4px; border-top: 1px solid rgba(255, 255, 255, 0.18); }
     .knob { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; }
     .knob .dial { width: 48px; height: 48px; border-radius: 50%; cursor: ns-resize; touch-action: none; outline: none; }
@@ -151,15 +151,15 @@
     .switch input:focus-visible + .toggle { box-shadow: 0 0 0 2px #fff; }
     .foot { display: flex; align-items: center; gap: 12px; margin-top: auto; padding-top: 6px; }
     .led { width: 10px; height: 10px; border-radius: 50%; background: #5a1010; box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.6); flex: none; }
-    .pedal.on .led { background: #ff3b30; box-shadow: 0 0 8px 2px rgba(255, 59, 48, 0.75); }
-    .footswitch { width: 40px; height: 40px; border-radius: 50%; padding: 0; border: 0; flex: none;
+    .unit.on .led { background: #ff3b30; box-shadow: 0 0 8px 2px rgba(255, 59, 48, 0.75); }
+    .engage { width: 40px; height: 40px; border-radius: 50%; padding: 0; border: 0; flex: none;
       background: radial-gradient(circle at 35% 30%, #fafafa, #b8b8bd 45%, #6f6f75 75%); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.6), inset 0 -2px 3px rgba(0, 0, 0, 0.3); }
-    .footswitch:active { transform: translateY(1px); }
-    .footswitch:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-    .pedal .name { font-weight: 800; font-size: 19px; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1; flex: 1; }
-    .pedal .name small { display: block; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; opacity: 0.8; margin-top: 3px; }
-    .pedal .reset { background: rgba(0, 0, 0, 0.25); color: #fff; border: 0; font-size: 11px; padding: 3px 8px; border-radius: 6px; box-shadow: none; }
-    .pedal .reset:hover { background: rgba(0, 0, 0, 0.4); }
+    .engage:active { transform: translateY(1px); }
+    .engage:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+    .unit .name { font-weight: 800; font-size: 19px; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1; flex: 1; }
+    .unit .name small { display: block; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; opacity: 0.8; margin-top: 3px; }
+    .unit .reset { background: rgba(0, 0, 0, 0.25); color: #fff; border: 0; font-size: 11px; padding: 3px 8px; border-radius: 6px; box-shadow: none; }
+    .unit .reset:hover { background: rgba(0, 0, 0, 0.4); }
 
     #tip { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 4; max-width: 280px; background: var(--surface); color: var(--text);
       border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; line-height: 1.4; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18); }
@@ -267,7 +267,7 @@
           <label title="Streaming HMM decoder: notes appear while the file is transcribed, each as soon as it is final"><input type="radio" name="mode" value="live" checked> Live</label>
           <label title="Basic Pitch's own note creation with the melodia trick, as in the basic-pitch package: notes appear once the whole file is transcribed"><input type="radio" name="mode" value="original"> Original</label>
         </div>
-        <button id="pedals" class="chip" type="button" aria-pressed="false" aria-controls="board" title="Knobs for each decoder's settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 12 9 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Pedalboard</button>
+        <button id="controls" class="chip" type="button" aria-pressed="false" aria-controls="control-panel" title="Knobs for each decoder's settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 12 9 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Control panel</button>
         <button id="example" class="chip" type="button">Try an example</button>
         <button id="mic" class="chip" type="button" title="Transcribe from your microphone"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> <span>Mic</span></button>
       </div>
@@ -300,30 +300,30 @@
         <button id="follow" type="button" aria-pressed="false" aria-label="Follow the playhead" title="Follow the playhead"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
       </div>
     </div>
-    <section id="board" class="board" aria-label="Pedalboard" hidden>
-      <div class="board-head">
-        <b>Pedalboard</b>
-        <span>Same model output, different decoding: turn a knob (drag, scroll or arrow keys; double-click resets it) and the notes are made again. Press a footswitch to use that pedal.</span>
-        <button id="board-close" type="button" aria-label="Close the pedalboard">×</button>
+    <section id="control-panel" class="panel-board" aria-label="Control panel" hidden>
+      <div class="panel-head">
+        <b>Control panel</b>
+        <span>Same model output, different decoding: turn a knob (drag, scroll or arrow keys; double-click resets it) and the notes are made again. Press a decoder's round button to use it.</span>
+        <button id="panel-close" type="button" aria-label="Close the control panel">×</button>
       </div>
-      <div class="pedals">
-        <div class="pedal live" data-mode="live">
+      <div class="units">
+        <div class="unit live" data-mode="live">
           <div class="knobs main"></div>
           <div class="knobs more"></div>
           <div class="foot">
             <span class="led" aria-hidden="true"></span>
-            <button class="footswitch" type="button" aria-label="Use the Live pedal"></button>
+            <button class="engage" type="button" aria-label="Use the Live decoder"></button>
             <div class="name">Live<small>streaming HMM</small></div>
             <button class="reset" type="button">reset</button>
           </div>
         </div>
         <svg class="cable" viewBox="0 0 40 120" aria-hidden="true"><path d="M0,40 C24,40 16,80 40,80"/></svg>
-        <div class="pedal original" data-mode="original">
+        <div class="unit original" data-mode="original">
           <div class="knobs main"></div>
           <div class="switches"></div>
           <div class="foot">
             <span class="led" aria-hidden="true"></span>
-            <button class="footswitch" type="button" aria-label="Use the Original pedal"></button>
+            <button class="engage" type="button" aria-label="Use the Original decoder"></button>
             <div class="name">Original<small>melodia trick</small></div>
             <button class="reset" type="button">reset</button>
           </div>
@@ -354,12 +354,12 @@
         builds pitch contours the same way; <a href="https://github.com/spotify/basic-pitch/blob/main/basic_pitch/note_creation.py">code</a>).
         It needs the whole file, so its notes come at the end. Switching modes keeps the music playing.</p>
 
-      <h3>Pedalboard</h3>
-      <p><b>Pedalboard</b> opens a board with one pedal per decoder. Its knobs are the decoder's settings: turn one
+      <h3>Control panel</h3>
+      <p><b>Control panel</b> opens a panel with one unit per decoder. Its knobs are the decoder's settings: turn one
         (drag up or down, scroll, or use the arrow keys; <kbd>shift</kbd> for fine steps; double-click to reset it)
         and the notes are made again from the same model output, usually in a few milliseconds, without running the
-        model. Press a footswitch to use that pedal; its LED lights up. Changed knobs show their values in yellow, and
-        <b>reset</b> puts a pedal back to its defaults. Settings are remembered in this browser. Results made with
+        model. Press a unit's round button to use that decoder; its light comes on. Changed knobs show their values in yellow, and
+        <b>reset</b> puts a unit back to its defaults. Settings are remembered in this browser. Results made with
         changed settings aren't saved.</p>
 
       <h3>Move around</h3>

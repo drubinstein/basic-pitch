@@ -15,7 +15,7 @@ keyed by a hash of the file and the mode, so reopening a file is instant (`src/c
 Two modes: **Live** is the streaming HMM above; **Original** is Basic Pitch's own note creation with the melodia
 trick (`src/original.js`, a port of `output_to_notes_polyphonic` that gives the same notes as the Python code),
 which needs the whole file, so its notes come at the end. The worker keeps the model's output, so the
-**pedalboard** (`src/params.js`, `src/knob.js`) can re-decode with other settings, or the other decoder, in
+**control panel** (`src/params.js`, `src/knob.js`) can re-decode with other settings, or the other decoder, in
 milliseconds without running the model again.
 
 The transcribe tab works like a map: the roll fills the screen with controls floating over it. **Layers** shows
@@ -29,7 +29,7 @@ How to use, Report and About tabs explain the controls, what we tried and why (w
 ```
 npm ci
 npm test        # windowing and timing vs Python, HMM and original notes vs the Python code, any window
-                # order gives the same notes, MIDI, pedal knobs, playback, synth scheduling, mic resampling
+                # order gives the same notes, MIDI, control-panel knobs, playback, synth scheduling, mic resampling
                 # and WAV, chart helpers, cache round trip, model smoke test
 npm run build   # static site in dist/
 npm run serve   # serve dist/ on http://localhost:8123 with no special headers, like GitHub Pages

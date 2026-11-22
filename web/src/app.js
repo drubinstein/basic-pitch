@@ -72,11 +72,11 @@ function setMode(m) {
   mode = m;
   remember('mode', mode);
   for (const input of document.querySelectorAll('input[name="mode"]')) input.checked = input.value === mode;
-  for (const p of document.querySelectorAll('.pedal')) p.classList.toggle('on', p.dataset.mode === mode);
+  for (const u of document.querySelectorAll('.unit')) u.classList.toggle('on', u.dataset.mode === mode);
   if (current) decodeAgain();
 }
 
-// --- Pedalboard: knobs for each decoder's settings. The worker keeps the model's output, so a
+// --- Control panel: knobs for each decoder's settings. The worker keeps the model's output, so a
 // change only re-runs the decoding; without it (a result from the cache) the file is transcribed again. ---
 
 const DEFS = { live: LIVE, original: ORIGINAL };
@@ -100,23 +100,23 @@ function decodeAgain() {
   }, 90);
 }
 
-function buildPedals() {
-  for (const pedal of document.querySelectorAll('.pedal')) {
-    const m = pedal.dataset.mode, controls = [];
-    pedal.classList.toggle('on', m === mode);
+function buildControls() {
+  for (const unit of document.querySelectorAll('.unit')) {
+    const m = unit.dataset.mode, controls = [];
+    unit.classList.toggle('on', m === mode);
     for (const def of DEFS[m]) {
       const change = (v) => {
         settings[m][def.key] = v;
         remember(`settings-${m}`, JSON.stringify(settings[m]));
-        if (m !== mode) setMode(m); // the pedal you touch is the one you hear
+        if (m !== mode) setMode(m); // the decoder you adjust is the one you hear
         else decodeAgain();
       };
       const c = def.kind === 'switch' ? createSwitch(def, settings[m][def.key], change) : createKnob(def, settings[m][def.key], change, { small: def.row === 'more' });
       controls.push([def, c]);
-      pedal.querySelector(def.kind === 'switch' ? '.switches' : def.row === 'more' ? '.knobs.more' : '.knobs.main').append(c.root);
+      unit.querySelector(def.kind === 'switch' ? '.switches' : def.row === 'more' ? '.knobs.more' : '.knobs.main').append(c.root);
     }
-    pedal.querySelector('.footswitch').addEventListener('click', () => setMode(m));
-    pedal.querySelector('.reset').addEventListener('click', () => {
+    unit.querySelector('.engage').addEventListener('click', () => setMode(m));
+    unit.querySelector('.reset').addEventListener('click', () => {
       Object.assign(settings[m], defaults(DEFS[m]));
       remember(`settings-${m}`, '{}');
       for (const [def, c] of controls) c.set(def.default);
@@ -125,15 +125,15 @@ function buildPedals() {
     });
   }
 }
-buildPedals();
-const showBoard = (on) => {
-  $('board').hidden = !on;
-  $('pedals').setAttribute('aria-pressed', String(on));
-  remember('board', on ? 'open' : 'closed');
+buildControls();
+const showPanel = (on) => {
+  $('control-panel').hidden = !on;
+  $('controls').setAttribute('aria-pressed', String(on));
+  remember('control-panel', on ? 'open' : 'closed');
 };
-$('pedals').addEventListener('click', () => showBoard($('board').hidden));
-$('board-close').addEventListener('click', () => showBoard(false));
-showBoard(recall('board') === 'open');
+$('controls').addEventListener('click', () => showPanel($('control-panel').hidden));
+$('panel-close').addEventListener('click', () => showPanel(false));
+showPanel(recall('control-panel') === 'open');
 
 // --- Layers: the model's output before decoding (the heat map) and the notes. ---
 
@@ -196,9 +196,9 @@ function showCached(name, hit) {
   $('download').hidden = false;
 }
 
-const modeLabel = (custom = false) => `${mode === 'original' ? 'Original (melodia trick' : 'Live (streaming HMM'}${custom ? ', pedalboard settings' : ''})`;
+const modeLabel = (custom = false) => `${mode === 'original' ? 'Original (melodia trick' : 'Live (streaming HMM'}${custom ? ', custom settings' : ''})`;
 
-// Notes decoded again by the pedalboard (same model output, other settings or decoder).
+// Notes decoded again from the control panel (same model output, other settings or decoder).
 function applyDecoded(m, { name, duration, totalFrames }) {
   if (m.id !== decodeId) return;
   const notes = m.notes;
@@ -263,7 +263,7 @@ async function open(name, blob, { useCache = isDefaultFor(mode) } = {}) {
     } else if (m.type === 'progress') {
       if (m.activation) roll.addTile(m.window, m.activation);
       result.order.push(m.window);
-      // Streamed notes count until the pedalboard asks for another decoding.
+      // Streamed notes count until the control panel asks for another decoding.
       if (decodeId === 0) {
         roll.addNotes(m.notes);
         result.notes.push(...m.notes);
@@ -276,7 +276,7 @@ async function open(name, blob, { useCache = isDefaultFor(mode) } = {}) {
       applyDecoded(m, { name, duration, totalFrames });
     } else if (m.type === 'done') {
       if (decodeId !== 0) {
-        // The pedalboard changed something meanwhile; its decoding comes next.
+        // The control panel changed something meanwhile; its decoding comes next.
         Object.assign(result, { done: true, elapsedMs: m.elapsedMs, modelMs: m.modelMs, runs: m.runs, windows: m.windows });
         $('again').hidden = false;
         $('download').hidden = false;

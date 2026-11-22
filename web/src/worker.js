@@ -2,7 +2,7 @@
 // what's on screen is done first (the page posts the visible windows as {type: 'view'}). In live
 // mode, streaming HMMs decode notes as soon as windows arrive; in original mode, Basic Pitch's own
 // note creation (with the melodia trick) runs once the whole file is in. Every frame's activations
-// are kept, so the pedalboard can re-decode with other settings, or the other decoder, without
+// are kept, so the control panel can re-decode with other settings, or the other decoder, without
 // running the model again ({type: 'redecode'}). Built as a classic worker because
 // LiteRT.js loads its Emscripten module with importScripts().
 import { loadLiteRt, loadAndCompile } from '@litertjs/core';

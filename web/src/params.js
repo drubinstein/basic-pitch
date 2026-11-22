@@ -1,4 +1,4 @@
-// The pedalboard's knobs and switches for each decoder: ranges, defaults (the decoders' own
+// The control panel's knobs and switches for each decoder: ranges, defaults (the decoders' own
 // defaults) and how knob settings map onto each decoder's options.
 const MS_PER_FRAME = (1000 * 256) / 22050;
 const ms = (frames) => `${Math.round(frames * MS_PER_FRAME)} ms`;

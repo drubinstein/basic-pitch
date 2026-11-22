@@ -1,4 +1,4 @@
-// A rotary knob (and a toggle switch) for the pedalboard. Drag up or down (shift for fine),
+// A rotary knob (and a toggle switch) for the control panel. Drag up or down (shift for fine),
 // scroll, or use the arrow keys; double-click puts it back to its default. Knobs are sliders to
 // assistive tech.
 

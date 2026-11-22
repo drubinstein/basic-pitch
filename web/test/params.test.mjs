@@ -1,4 +1,4 @@
-// The pedalboard's knobs: their defaults are the decoders' defaults, they map onto each decoder's
+// The control panel's knobs: their defaults are the decoders' defaults, they map onto each decoder's
 // options, and knob values move, snap and turn the way a knob should.
 import test from 'node:test';
 import assert from 'node:assert/strict';
