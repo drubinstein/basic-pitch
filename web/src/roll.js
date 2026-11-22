@@ -79,6 +79,14 @@ export class PianoRoll {
     this.request();
   }
 
+  // Replace all the notes (after re-decoding with other settings).
+  setNotes(notes) {
+    this.notes = [];
+    this.hover = null;
+    this.selected = null;
+    this.addNotes(notes);
+  }
+
   // Move the playhead to t seconds. While playing, pass how far it moved since the last frame
   // (`advance`) and the wall time since then (`dt`) so the view can follow.
   setPlayhead(t, motion = null) {

@@ -4,11 +4,13 @@
 export const RESULT_VERSION = 3; // bump when the model, windowing or decoders change
 const DB_NAME = 'basic-pitch-live', STORE = 'results', KEEP = 12;
 
-export async function fileKey(bytes, mode) {
+export async function fileHash(bytes) {
   if (!globalThis.crypto?.subtle) return null;
   const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
-  return `v${RESULT_VERSION}:${mode}:` + Array.from(hash, (b) => b.toString(16).padStart(2, '0')).join('');
+  return Array.from(hash, (b) => b.toString(16).padStart(2, '0')).join('');
 }
+export const resultKey = (hash, mode) => (hash ? `v${RESULT_VERSION}:${mode}:${hash}` : null);
+export const fileKey = async (bytes, mode) => resultKey(await fileHash(bytes), mode);
 
 // notes: [start, end, pitch, start final at, end final at (frames), velocity]; activation:
 // totalFrames x 88 bytes.

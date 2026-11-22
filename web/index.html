@@ -47,7 +47,7 @@
     .panel { flex: 1; min-height: 0; }
 
     /* Transcribe: the roll fills the tab like a map, with controls floating over it. */
-    #panel-transcribe { display: flex; }
+    #panel-transcribe { display: flex; flex-direction: column; }
     #stage { position: relative; flex: 1; display: flex; min-width: 0; min-height: 360px; }
     #roll { flex: 1; width: 100%; height: 100%; touch-action: none; cursor: grab; outline: none; display: block; }
     #roll:active { cursor: grabbing; }
@@ -103,6 +103,61 @@
       .player { bottom: 96px; }
       .zoom { bottom: 150px; }
     }
+    .chip svg { width: 16px; height: 16px; vertical-align: -3px; margin-right: 2px; }
+    #pedals[aria-pressed="true"] { background: var(--accent); color: #fff; }
+
+    /* Pedalboard */
+    .board { flex: none; background: repeating-linear-gradient(90deg, #26262a 0 2px, #222226 2px 6px); border-top: 1px solid #111; color: #ececef; padding: 8px 16px 14px; overflow-x: auto; }
+    .board-head { display: flex; gap: 12px; align-items: baseline; margin-bottom: 8px; font-size: 13px; color: #b9b9c0; }
+    .board-head b { color: #fff; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase; }
+    .board-head span { flex: 1; }
+    #board-close { background: none; border: 0; color: #b9b9c0; font-size: 22px; line-height: 1; padding: 0 4px; box-shadow: none; }
+    #board-close:hover { color: #fff; }
+    .pedals { display: flex; align-items: stretch; min-width: max-content; }
+    .pedal { border-radius: 14px; padding: 10px 14px 10px; display: flex; flex-direction: column; gap: 6px; position: relative;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 -2px 0 rgba(0, 0, 0, 0.25), 0 8px 16px rgba(0, 0, 0, 0.55); opacity: 0.82; transition: opacity 0.15s; }
+    .pedal.on { opacity: 1; }
+    .pedal.live { background: linear-gradient(160deg, #3a7be6, #1b3f8c); width: 430px; }
+    .pedal.original { background: linear-gradient(160deg, #e8843a, #9a4612); width: 300px; }
+    .cable { width: 40px; height: auto; align-self: center; }
+    .cable path { fill: none; stroke: #0b0b0c; stroke-width: 6; stroke-linecap: round; }
+    .knobs { display: grid; gap: 4px 2px; }
+    .pedal.live .knobs.main { grid-template-columns: repeat(6, 1fr); }
+    .pedal.original .knobs.main { grid-template-columns: repeat(4, 1fr); }
+    .knobs.more { grid-template-columns: repeat(6, 1fr); padding-top: 4px; border-top: 1px solid rgba(255, 255, 255, 0.18); }
+    .knob { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; }
+    .knob .dial { width: 48px; height: 48px; border-radius: 50%; cursor: ns-resize; touch-action: none; outline: none; }
+    .knob.small .dial { width: 36px; height: 36px; }
+    .knob .dial svg { width: 100%; height: 100%; display: block; }
+    .knob .dial:focus-visible { box-shadow: 0 0 0 2px #fff; }
+    .knob .track { fill: none; stroke: rgba(255, 255, 255, 0.25); stroke-width: 3; stroke-linecap: round; }
+    .knob .fill { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; }
+    .knob .cap { fill: #1c1c20; stroke: rgba(255, 255, 255, 0.35); stroke-width: 1; }
+    .knob .pointer { stroke: #fff; stroke-width: 2.5; stroke-linecap: round; }
+    .knob .label { font-size: 10px; line-height: 1.15; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; margin-top: 2px; }
+    .knob.small .label { font-size: 9px; }
+    .knob .value { font-size: 11px; font-variant-numeric: tabular-nums; opacity: 0.85; }
+    .knob.moved .value, .switch.moved { color: #ffe08a; opacity: 1; }
+    .switches { display: flex; flex-direction: column; gap: 8px; padding: 6px 2px; }
+    .switch { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; }
+    .switch input { position: absolute; opacity: 0; pointer-events: none; }
+    .switch .toggle { width: 34px; height: 18px; border-radius: 9px; background: rgba(0, 0, 0, 0.35); position: relative; flex: none; box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5); }
+    .switch .toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #d9d9de; transition: left 0.12s; }
+    .switch input:checked + .toggle { background: rgba(255, 255, 255, 0.4); }
+    .switch input:checked + .toggle::after { left: 18px; background: #fff; }
+    .switch input:focus-visible + .toggle { box-shadow: 0 0 0 2px #fff; }
+    .foot { display: flex; align-items: center; gap: 12px; margin-top: auto; padding-top: 6px; }
+    .led { width: 10px; height: 10px; border-radius: 50%; background: #5a1010; box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.6); flex: none; }
+    .pedal.on .led { background: #ff3b30; box-shadow: 0 0 8px 2px rgba(255, 59, 48, 0.75); }
+    .footswitch { width: 40px; height: 40px; border-radius: 50%; padding: 0; border: 0; flex: none;
+      background: radial-gradient(circle at 35% 30%, #fafafa, #b8b8bd 45%, #6f6f75 75%); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.6), inset 0 -2px 3px rgba(0, 0, 0, 0.3); }
+    .footswitch:active { transform: translateY(1px); }
+    .footswitch:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+    .pedal .name { font-weight: 800; font-size: 19px; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1; flex: 1; }
+    .pedal .name small { display: block; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; opacity: 0.8; margin-top: 3px; }
+    .pedal .reset { background: rgba(0, 0, 0, 0.25); color: #fff; border: 0; font-size: 11px; padding: 3px 8px; border-radius: 6px; box-shadow: none; }
+    .pedal .reset:hover { background: rgba(0, 0, 0, 0.4); }
+
     #tip { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 4; max-width: 280px; background: var(--surface); color: var(--text);
       border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; line-height: 1.4; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18); }
     #tip .tip-name { font-size: 15px; font-weight: 650; }
@@ -209,6 +264,7 @@
           <label title="Streaming HMM decoder: notes appear while the file is transcribed, each as soon as it is final"><input type="radio" name="mode" value="live" checked> Live</label>
           <label title="Basic Pitch's own note creation with the melodia trick, as in the basic-pitch package: notes appear once the whole file is transcribed"><input type="radio" name="mode" value="original"> Original</label>
         </div>
+        <button id="pedals" class="chip" type="button" aria-pressed="false" aria-controls="board" title="Knobs for each decoder's settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 12 9 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Pedalboard</button>
         <button id="example" class="chip" type="button">Try an example</button>
       </div>
       <div id="stats" class="float stats"></div>
@@ -240,6 +296,36 @@
         <button id="follow" type="button" aria-pressed="false" aria-label="Follow the playhead" title="Follow the playhead"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
       </div>
     </div>
+    <section id="board" class="board" aria-label="Pedalboard" hidden>
+      <div class="board-head">
+        <b>Pedalboard</b>
+        <span>Same model output, different decoding: turn a knob (drag, scroll or arrow keys; double-click resets it) and the notes are made again. Press a footswitch to use that pedal.</span>
+        <button id="board-close" type="button" aria-label="Close the pedalboard">×</button>
+      </div>
+      <div class="pedals">
+        <div class="pedal live" data-mode="live">
+          <div class="knobs main"></div>
+          <div class="knobs more"></div>
+          <div class="foot">
+            <span class="led" aria-hidden="true"></span>
+            <button class="footswitch" type="button" aria-label="Use the Live pedal"></button>
+            <div class="name">Live<small>streaming HMM</small></div>
+            <button class="reset" type="button">reset</button>
+          </div>
+        </div>
+        <svg class="cable" viewBox="0 0 40 120" aria-hidden="true"><path d="M0,40 C24,40 16,80 40,80"/></svg>
+        <div class="pedal original" data-mode="original">
+          <div class="knobs main"></div>
+          <div class="switches"></div>
+          <div class="foot">
+            <span class="led" aria-hidden="true"></span>
+            <button class="footswitch" type="button" aria-label="Use the Original pedal"></button>
+            <div class="name">Original<small>melodia trick</small></div>
+            <button class="reset" type="button">reset</button>
+          </div>
+        </div>
+      </div>
+    </section>
   </section>
 
   <section id="panel-guide" class="panel doc" aria-label="How to use" hidden>
@@ -261,6 +347,14 @@
         the name comes from <a href="https://doi.org/10.1109/TASL.2012.2188515">Melodia</a>, a melody extractor that
         builds pitch contours the same way; <a href="https://github.com/spotify/basic-pitch/blob/main/basic_pitch/note_creation.py">code</a>).
         It needs the whole file, so its notes come at the end. Switching modes keeps the music playing.</p>
+
+      <h3>Pedalboard</h3>
+      <p><b>Pedalboard</b> opens a board with one pedal per decoder. Its knobs are the decoder's settings: turn one
+        (drag up or down, scroll, or use the arrow keys; <kbd>shift</kbd> for fine steps; double-click to reset it)
+        and the notes are made again from the same model output, usually in a few milliseconds, without running the
+        model. Press a footswitch to use that pedal; its LED lights up. Changed knobs show their values in yellow, and
+        <b>reset</b> puts a pedal back to its defaults. Settings are remembered in this browser. Results made with
+        changed settings aren't saved.</p>
 
       <h3>Move around</h3>
       <table class="keys">

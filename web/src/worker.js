@@ -1,12 +1,15 @@
 // Transcription worker: runs the model window by window with LiteRT.js, choosing windows so that
 // what's on screen is done first (the page posts the visible windows as {type: 'view'}). In live
 // mode, streaming HMMs decode notes as soon as windows arrive; in original mode, Basic Pitch's own
-// note creation (with the melodia trick) runs once the whole file is in. Built as a classic worker because
+// note creation (with the melodia trick) runs once the whole file is in. Every frame's activations
+// are kept, so the pedalboard can re-decode with other settings, or the other decoder, without
+// running the model again ({type: 'redecode'}). Built as a classic worker because
 // LiteRT.js loads its Emscripten module with importScripts().
 import { loadLiteRt, loadAndCompile } from '@litertjs/core';
 import { runWindow } from './model.js';
 import { FRAMES_PER_WINDOW, N_PITCHES, nOutputFrames, toByte, windowAt, windowFrames } from './pipeline.js';
-import { DEFAULT_PARAMS } from './hmm.js';
+import { StreamingHmm } from './hmm.js';
+import { LIVE, ORIGINAL, defaults, hmmOptions, originalOptions } from './params.js';
 import { WindowedDecoder, nextWindow, nextMissing } from './segments.js';
 import { originalNotes } from './original.js';
 import { velocity } from './midi.js';
@@ -43,7 +46,35 @@ const yieldToMessages = () => new Promise((resolve) => {
   channel.port2.postMessage(null);
 });
 
-async function transcribe(audio, mode) {
+let kept = null; // { note, onset, totalFrames } once the whole file is in
+let pending = null; // the latest re-decode asked for
+
+// Notes as [start, end, pitch, start final at, end final at, velocity]. Original notes have no
+// "final at" frames (-1): they are only final once the whole file is in. Live velocities are left to
+// the page, which has the activations at hand.
+function decodeAll({ note, onset, totalFrames }, mode, params) {
+  if (mode === 'original') return originalNotes(note, onset, originalOptions(params)).map(([s, e, pitch, amp]) => [s, e, pitch, -1, -1, velocity(amp)]);
+  const { prm, beam, maxLag } = hmmOptions(params), hmm = new StreamingHmm(prm, { beam, maxLag });
+  for (let t = 0; t < totalFrames; t++) hmm.push(note.subarray(t * N_PITCHES, (t + 1) * N_PITCHES), onset.subarray(t * N_PITCHES, (t + 1) * N_PITCHES));
+  return hmm.finish();
+}
+
+// Re-decode with the latest settings asked for; requests that arrive meanwhile replace each other.
+let decoding = false;
+async function redecode() {
+  if (decoding || !kept) return;
+  decoding = true;
+  while (pending) {
+    await yieldToMessages();
+    const job = pending;
+    pending = null;
+    const a = performance.now(), notes = decodeAll(kept, job.mode, job.params);
+    if (!pending) self.postMessage({ type: 'decoded', id: job.id, mode: job.mode, notes, decodeMs: performance.now() - a });
+  }
+  decoding = false;
+}
+
+async function transcribe(audio, mode, params = {}) {
   try {
     const t0 = performance.now();
     const { model, threads, numThreads } = await load();
@@ -51,9 +82,9 @@ async function transcribe(audio, mode) {
 
     const totalFrames = nOutputFrames(audio.length), nWin = Math.ceil(totalFrames / FRAMES_PER_WINDOW);
     const live = mode !== 'original';
-    const dec = live ? new WindowedDecoder(totalFrames, { prm: DEFAULT_PARAMS, beam: 2, maxLag: 100 }) : null;
-    // Original mode keeps every frame's activations for the end; live mode keeps only a few windows.
-    const whole = live ? null : { note: new Float32Array(totalFrames * N_PITCHES), onset: new Float32Array(totalFrames * N_PITCHES) };
+    const settings = { ...defaults(live ? LIVE : ORIGINAL), ...params[mode] };
+    const dec = live ? new WindowedDecoder(totalFrames, hmmOptions(settings)) : null;
+    const whole = { note: new Float32Array(totalFrames * N_PITCHES), onset: new Float32Array(totalFrames * N_PITCHES), totalFrames };
     const posted = new Uint8Array(nWin);
     const t1 = performance.now();
     let modelMs = 0, runs = 0, done = 0;
@@ -68,9 +99,9 @@ async function transcribe(audio, mode) {
       const start = w * FRAMES_PER_WINDOW, k = Math.min(FRAMES_PER_WINDOW, totalFrames - start);
       const note = windowFrames(out.note, N_PITCHES).slice(0, k * N_PITCHES);
       const onset = windowFrames(out.onset, N_PITCHES).slice(0, k * N_PITCHES);
-      let notes = [];
-      if (live) notes = dec.add(w, note, onset);
-      else { whole.note.set(note, start * N_PITCHES); whole.onset.set(onset, start * N_PITCHES); }
+      whole.note.set(note, start * N_PITCHES);
+      whole.onset.set(onset, start * N_PITCHES);
+      const notes = live ? dec.add(w, note, onset) : [];
       let activation = null;
       if (!posted[w]) {
         posted[w] = 1;
@@ -82,11 +113,12 @@ async function transcribe(audio, mode) {
         activation ? [activation.buffer] : [],
       );
     }
-    // Original notes have no "final at" frames: they are only final once the whole file is in.
     const a = performance.now();
-    const notes = live ? [] : originalNotes(whole.note, whole.onset).map(([s, e, pitch, amp]) => [s, e, pitch, -1, -1, velocity(amp)]);
+    const notes = live ? [] : decodeAll(whole, 'original', settings);
     const decodeMs = performance.now() - a;
     self.postMessage({ type: 'done', totalFrames, windows: nWin, notes, runs, modelMs, decodeMs, elapsedMs: performance.now() - t1 });
+    kept = whole;
+    redecode();
   } catch (err) {
     self.postMessage({ type: 'error', message: String(err?.stack || err) });
   }
@@ -96,7 +128,10 @@ function onMessage({ data }) {
   if (data.type === 'view') view = [data.first, data.last];
   else if (data.type === 'transcribe') {
     if (data.view) view = data.view;
-    transcribe(data.audio, data.mode);
+    transcribe(data.audio, data.mode, data.params);
+  } else if (data.type === 'redecode') {
+    pending = data;
+    redecode();
   }
 }
 

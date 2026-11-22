@@ -17,9 +17,9 @@ const note = load('vocadito_10_note.f32.gz'), onset = load('vocadito_10_onset.f3
 const tile = (x, n) => { const out = new Float32Array(x.length * n); for (let r = 0; r < n; r++) out.set(x, r * x.length); return out; };
 
 for (const c of ref.cases) {
-  test(`same notes as Python, ${c.repeat}x the example, melodia trick ${c.melodia ? 'on' : 'off'}`, () => {
+  test(`same notes as Python, ${c.repeat}x the example, melodia trick ${c.melodia ? 'on' : 'off'}${c.infer ? '' : ', no inferred onsets'}`, () => {
     const got = originalNotes(tile(note, c.repeat), tile(onset, c.repeat), {
-      onsetThresh: ref.onset_thresh, frameThresh: ref.frame_thresh, minNoteLen: ref.min_note_len, energyTol: ref.energy_tol, melodia: c.melodia,
+      onsetThresh: ref.onset_thresh, frameThresh: ref.frame_thresh, minNoteLen: ref.min_note_len, energyTol: ref.energy_tol, melodia: c.melodia, inferOnsets: c.infer,
     });
     assert.deepEqual(got.map((n) => n.slice(0, 3)), c.notes.map((n) => n.slice(0, 3)));
     got.forEach((n, i) => assert.ok(Math.abs(n[3] - c.notes[i][3]) < 1e-5, `amplitude of note ${i}`));
@@ -27,7 +27,7 @@ for (const c of ref.cases) {
 }
 
 test('the defaults are predict()\'s: melodia trick on', () => {
-  const want = ref.cases.find((c) => c.repeat === 1 && c.melodia).notes.map((n) => n.slice(0, 3));
+  const want = ref.cases.find((c) => c.repeat === 1 && c.melodia && c.infer).notes.map((n) => n.slice(0, 3));
   assert.deepEqual(originalNotes(note, onset).map((n) => n.slice(0, 3)), want);
 });
 

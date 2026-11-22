@@ -6,13 +6,13 @@
 // test/original.test.mjs checks the notes match the Python code exactly.
 import { N_PITCHES as P, MIDI_OFFSET } from './pipeline.js';
 
-export const ORIGINAL_DEFAULTS = { onsetThresh: 0.5, frameThresh: 0.3, minNoteLen: 11, energyTol: 11, melodia: true };
+export const ORIGINAL_DEFAULTS = { onsetThresh: 0.5, frameThresh: 0.3, minNoteLen: 11, energyTol: 11, melodia: true, inferOnsets: true };
 const MAX_FREQ_IDX = P - 1;
 
 // frames, onsets: (n x 88) note and onset activations. Returns [start, end, pitch, amplitude] in
 // the order the Python code makes them.
 export function originalNotes(frames, onsets, opts = {}) {
-  const { onsetThresh, frameThresh, minNoteLen, energyTol, melodia } = { ...ORIGINAL_DEFAULTS, ...opts };
+  const { onsetThresh, frameThresh, minNoteLen, energyTol, melodia, inferOnsets } = { ...ORIGINAL_DEFAULTS, ...opts };
   const n = frames.length / P;
 
   // get_infered_onsets with n_diff = 2, computed where needed instead of stored. Like numpy, a
@@ -25,7 +25,7 @@ export function originalNotes(frames, onsets, opts = {}) {
   let maxRise = 0, maxOnset = -Infinity;
   for (let t = 0; t < n; t++) for (let f = 0; f < P; f++) maxRise = Math.max(maxRise, rise(t, f));
   for (const v of onsets) maxOnset = Math.max(maxOnset, v);
-  const onset = (t, f) => Math.max(onsets[t * P + f], (maxOnset * rise(t, f)) / maxRise);
+  const onset = inferOnsets ? (t, f) => Math.max(onsets[t * P + f], (maxOnset * rise(t, f)) / maxRise) : (t, f) => onsets[t * P + f];
 
   // Onset peaks (strict local maxima in time; argrelmax never picks the first or last frame), in
   // time then pitch order, taken backwards.

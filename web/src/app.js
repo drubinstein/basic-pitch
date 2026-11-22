@@ -9,6 +9,8 @@ import { noteName, noteHz, meanActivation } from './notes.js';
 import { toMidi, velocity } from './midi.js';
 import { renderReport } from './report.js';
 import { NotePlayer, mix } from './synth.js';
+import { LIVE, ORIGINAL, defaults, isDefault } from './params.js';
+import { createKnob, createSwitch } from './knob.js';
 
 const $ = (id) => document.getElementById(id);
 const audio = $('audio'), clock = new Clock(audio);
@@ -61,12 +63,76 @@ function savedMode() {
 }
 for (const input of document.querySelectorAll('input[name="mode"]')) {
   input.checked = input.value === mode;
-  input.addEventListener('change', () => {
-    mode = input.value;
-    remember('mode', mode);
-    if (current) open(current.name, current.blob);
-  });
+  input.addEventListener('change', () => setMode(input.value));
 }
+
+function setMode(m) {
+  if (m === mode) return;
+  mode = m;
+  remember('mode', mode);
+  for (const input of document.querySelectorAll('input[name="mode"]')) input.checked = input.value === mode;
+  for (const p of document.querySelectorAll('.pedal')) p.classList.toggle('on', p.dataset.mode === mode);
+  if (current) decodeAgain();
+}
+
+// --- Pedalboard: knobs for each decoder's settings. The worker keeps the model's output, so a
+// change only re-runs the decoding; without it (a result from the cache) the file is transcribed again. ---
+
+const DEFS = { live: LIVE, original: ORIGINAL };
+const settings = Object.fromEntries(Object.keys(DEFS).map((m) => {
+  let saved = {};
+  try { saved = JSON.parse(recall(`settings-${m}`) || '{}'); } catch { /* defaults */ }
+  return [m, { ...defaults(DEFS[m]), ...saved }];
+}));
+const allSettings = () => ({ live: { ...settings.live }, original: { ...settings.original } });
+const isDefaultFor = (m) => isDefault(DEFS[m], settings[m]);
+let decodeId = 0, decodeTimer = 0;
+
+function decodeAgain() {
+  clearTimeout(decodeTimer);
+  decodeTimer = setTimeout(() => {
+    if (!current) return;
+    if (!worker) return open(current.name, current.blob, { useCache: isDefaultFor(mode) });
+    decodeId++;
+    setStatus(`Decoding ${current.name}…`);
+    worker.postMessage({ type: 'redecode', id: decodeId, mode, params: { ...settings[mode] } });
+  }, 90);
+}
+
+function buildPedals() {
+  for (const pedal of document.querySelectorAll('.pedal')) {
+    const m = pedal.dataset.mode, controls = [];
+    pedal.classList.toggle('on', m === mode);
+    for (const def of DEFS[m]) {
+      const change = (v) => {
+        settings[m][def.key] = v;
+        remember(`settings-${m}`, JSON.stringify(settings[m]));
+        if (m !== mode) setMode(m); // the pedal you touch is the one you hear
+        else decodeAgain();
+      };
+      const c = def.kind === 'switch' ? createSwitch(def, settings[m][def.key], change) : createKnob(def, settings[m][def.key], change, { small: def.row === 'more' });
+      controls.push([def, c]);
+      pedal.querySelector(def.kind === 'switch' ? '.switches' : def.row === 'more' ? '.knobs.more' : '.knobs.main').append(c.root);
+    }
+    pedal.querySelector('.footswitch').addEventListener('click', () => setMode(m));
+    pedal.querySelector('.reset').addEventListener('click', () => {
+      Object.assign(settings[m], defaults(DEFS[m]));
+      remember(`settings-${m}`, '{}');
+      for (const [def, c] of controls) c.set(def.default);
+      if (m === mode) decodeAgain();
+      else setMode(m);
+    });
+  }
+}
+buildPedals();
+const showBoard = (on) => {
+  $('board').hidden = !on;
+  $('pedals').setAttribute('aria-pressed', String(on));
+  remember('board', on ? 'open' : 'closed');
+};
+$('pedals').addEventListener('click', () => showBoard($('board').hidden));
+$('board-close').addEventListener('click', () => showBoard(false));
+showBoard(recall('board') === 'open');
 
 // --- Layers: the model's output before decoding (the heat map) and the notes. ---
 
@@ -129,12 +195,13 @@ function showCached(name, hit) {
   $('download').hidden = false;
 }
 
-const modeLabel = () => (mode === 'original' ? 'Original (melodia trick)' : 'Live (streaming HMM)');
+const modeLabel = (custom = false) => `${mode === 'original' ? 'Original (melodia trick' : 'Live (streaming HMM'}${custom ? ', pedalboard settings' : ''})`;
 
 // blob: the file (a File, or the example fetched as a Blob).
-async function open(name, blob, { useCache = true } = {}) {
+async function open(name, blob, { useCache = isDefaultFor(mode) } = {}) {
   const id = ++opened, stale = () => id !== opened;
   showTranscribe();
+  decodeId = 0;
   worker?.terminate();
   worker = null;
   if (current?.blob !== blob) loadAudio(blob);
@@ -146,8 +213,9 @@ async function open(name, blob, { useCache = true } = {}) {
   setStatus(`Decoding ${name}…`);
   setStats('');
   const bytes = await blob.arrayBuffer();
-  const key = await cache.fileKey(bytes, mode).catch(() => null);
+  const hash = await cache.fileHash(bytes).catch(() => null), key = cache.resultKey(hash, mode);
   if (stale()) return;
+  current.hash = hash;
   if (useCache) {
     const hit = await cache.load(key);
     if (stale()) return;
@@ -167,6 +235,7 @@ async function open(name, blob, { useCache = true } = {}) {
   let runtime = '';
   const result = { name, mode: runMode, duration, notes: [], order: [] };
   results = result.notes;
+  const runSettings = allSettings(), cacheable = isDefaultFor(runMode);
   window.basicPitch = result; // for scripted checks
   worker = new Worker('worker.js');
   worker.onmessage = ({ data: m }) => {
@@ -176,14 +245,36 @@ async function open(name, blob, { useCache = true } = {}) {
       setStatus(`Transcribing ${name}…`);
     } else if (m.type === 'progress') {
       if (m.activation) roll.addTile(m.window, m.activation);
-      roll.addNotes(m.notes);
-      result.notes.push(...m.notes);
       result.order.push(m.window);
-      if (m.notes.length) synthNotes();
+      // Streamed notes count until the pedalboard asks for another decoding.
+      if (decodeId === 0) {
+        roll.addNotes(m.notes);
+        result.notes.push(...m.notes);
+        if (m.notes.length) synthNotes();
+      }
       const secs = Math.min(duration, (m.done * FRAMES_PER_WINDOW * 256) / SAMPLE_RATE);
       setStatus(`Transcribing ${name}… ${m.done}/${m.windows} windows${runMode === 'original' ? ' · notes come once the whole file is in' : ''}`);
       setStats(`${runtime} · ${(secs / (m.elapsedMs / 1000)).toFixed(1)}× real time`);
+    } else if (m.type === 'decoded') {
+      if (m.id !== decodeId) return;
+      const notes = m.notes;
+      for (const n of notes) n[5] ??= velocity(meanActivation(roll.tiles, FRAMES_PER_WINDOW, n[0], n[1], n[2]));
+      roll.setNotes(notes);
+      results = notes;
+      synthNotes();
+      Object.assign(window.basicPitch, { mode: m.mode, notes, decodeMs: m.decodeMs, redecoded: true });
+      finished = { name, mode: m.mode, notes };
+      setStatus(`${name}: ${notes.length} notes`);
+      setStats(`${modeLabel(!isDefaultFor(m.mode))} · decoded again in ${m.decodeMs < 1000 ? `${Math.round(m.decodeMs)} ms` : `${(m.decodeMs / 1000).toFixed(1)} s`}, without running the model`);
+      if (isDefaultFor(m.mode)) cache.save({ key: cache.resultKey(current?.hash, m.mode), name, duration, totalFrames, notes, activation: roll.activation() });
     } else if (m.type === 'done') {
+      if (decodeId !== 0) {
+        // The pedalboard changed something meanwhile; its decoding comes next.
+        Object.assign(result, { done: true, elapsedMs: m.elapsedMs, modelMs: m.modelMs, runs: m.runs, windows: m.windows });
+        $('again').hidden = false;
+        $('download').hidden = false;
+        return;
+      }
       roll.addNotes(m.notes);
       result.notes.push(...m.notes);
       // Live notes get their velocity now that every window's activations are in.
@@ -195,15 +286,15 @@ async function open(name, blob, { useCache = true } = {}) {
       $('again').hidden = false;
       setStatus(`${name}: ${result.notes.length} notes`);
       const notesTime = runMode === 'original' ? ` · note creation ${(m.decodeMs / 1000).toFixed(2)} s` : '';
-      setStats(`${modeLabel()} · ${runtime} · ${(duration / (m.elapsedMs / 1000)).toFixed(1)}× real time · model ${(m.modelMs / 1000).toFixed(2)} s for ${duration.toFixed(1)} s of audio${notesTime}`);
-      cache.save({ key, name, duration, totalFrames, notes: result.notes, activation: roll.activation() });
+      setStats(`${modeLabel(!cacheable)} · ${runtime} · ${(duration / (m.elapsedMs / 1000)).toFixed(1)}× real time · model ${(m.modelMs / 1000).toFixed(2)} s for ${duration.toFixed(1)} s of audio${notesTime}`);
+      if (cacheable) cache.save({ key, name, duration, totalFrames, notes: result.notes, activation: roll.activation() });
     } else if (m.type === 'error') {
       setStatus(`Something went wrong: ${m.message.split('\n')[0]}`);
       result.error = m.message;
       console.error(m.message);
     }
   };
-  worker.postMessage({ type: 'transcribe', audio: samples, mode: runMode, view }, [samples.buffer]);
+  worker.postMessage({ type: 'transcribe', audio: samples, mode: runMode, params: runSettings, view }, [samples.buffer]);
 }
 
 // --- Playback: the song through an <audio> element, the notes through a synth, mixed in one
