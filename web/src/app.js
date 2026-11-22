@@ -1,6 +1,6 @@
 // Page wiring: decode audio to 22050 Hz mono, hand it to the transcription worker, draw what comes
-// back, play the file with a playhead over the roll, and keep finished results in this browser so
-// reopening a file is instant.
+// back, play the file (and/or the notes, through a small synth) with a playhead over the roll, and
+// keep finished results in this browser so reopening a file is instant.
 import { FRAMES_PER_WINDOW, N_PITCHES, SAMPLE_RATE, frameToTime, nOutputFrames } from './pipeline.js';
 import { PianoRoll } from './roll.js';
 import * as cache from './cache.js';
@@ -8,6 +8,7 @@ import { Clock, formatTime } from './playback.js';
 import { noteName, noteHz, meanActivation } from './notes.js';
 import { toMidi, velocity } from './midi.js';
 import { renderReport } from './report.js';
+import { NotePlayer, mix } from './synth.js';
 
 const $ = (id) => document.getElementById(id);
 const audio = $('audio'), clock = new Clock(audio);
@@ -21,16 +22,17 @@ const roll = new PianoRoll($('roll'), frameToTime, {
   },
   onNote: showTip,
   onSeek: seek,
-  onSounding: (notes) => {
-    const names = notes.map((n) => noteName(n.pitch));
-    $('now').textContent = names.length > 8 ? `${names.slice(0, 8).join(' ')} +${names.length - 8}` : names.join(' ') || '–';
-  },
-  onFollow: (on) => { $('follow').hidden = on || audio.paused; },
+  onFollow: (on) => $('follow').setAttribute('aria-pressed', String(on)),
 });
 
 window.pianoRoll = roll; // for scripted checks
 const setStatus = (text) => { $('status').textContent = text; };
-const setStats = (text) => { $('stats').textContent = text; };
+const setStats = (text) => {
+  $('stats').replaceChildren();
+  if (text) { const span = document.createElement('span'); span.textContent = text; $('stats').append(span); }
+};
+const remember = (key, value) => { try { localStorage.setItem(key, value); } catch { /* not remembered */ } };
+const recall = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
 
 // --- Tabs: #transcribe (default), #guide, #report, #about. A link to anything inside a tab opens it. ---
 
@@ -61,10 +63,30 @@ for (const input of document.querySelectorAll('input[name="mode"]')) {
   input.checked = input.value === mode;
   input.addEventListener('change', () => {
     mode = input.value;
-    try { localStorage.setItem('mode', mode); } catch { /* not remembered */ }
+    remember('mode', mode);
     if (current) open(current.name, current.blob);
   });
 }
+
+// --- Layers: the model's output before decoding (the heat map) and the notes. ---
+
+const layers = { heat: recall('layer-heat') !== 'off', notes: recall('layer-notes') !== 'off' };
+roll.setLayers(layers);
+for (const box of document.querySelectorAll('[data-layer]')) {
+  box.checked = layers[box.dataset.layer];
+  box.addEventListener('change', () => {
+    roll.setLayers({ [box.dataset.layer]: box.checked });
+    remember(`layer-${box.dataset.layer}`, box.checked ? 'on' : 'off');
+  });
+}
+$('layers').addEventListener('click', () => {
+  const open = $('layers-pop').hidden;
+  $('layers-pop').hidden = !open;
+  $('layers').setAttribute('aria-expanded', String(open));
+});
+addEventListener('pointerdown', (e) => {
+  if (!$('layers-pop').hidden && !e.target.closest('.layers')) { $('layers-pop').hidden = true; $('layers').setAttribute('aria-expanded', 'false'); }
+});
 
 // --- Transcription. ---
 
@@ -83,7 +105,7 @@ async function decode(bytes) {
 // A fresh roll for this file, keeping the playhead where the music is.
 function resetRoll(duration, totalFrames) {
   roll.reset(duration, totalFrames);
-  $('seek').max = duration;
+  synthNotes();
   $('total').textContent = formatTime(duration);
   showTime(clock.time());
   if (audio.src) {
@@ -97,6 +119,8 @@ function showCached(name, hit) {
   const step = FRAMES_PER_WINDOW * N_PITCHES;
   for (let w = 0; w * FRAMES_PER_WINDOW < hit.totalFrames; w++) roll.addTile(w, hit.activation.subarray(w * step, (w + 1) * step));
   roll.addNotes(hit.notes);
+  results = hit.notes;
+  synthNotes();
   window.basicPitch = { name, mode, duration: hit.duration, notes: hit.notes, done: true, fromCache: true };
   finished = { name, mode, notes: hit.notes };
   setStatus(`${name}: ${hit.notes.length} notes`);
@@ -118,6 +142,7 @@ async function open(name, blob, { useCache = true } = {}) {
   finished = null;
   $('again').hidden = true;
   $('download').hidden = true;
+  results = [];
   setStatus(`Decoding ${name}…`);
   setStats('');
   const bytes = await blob.arrayBuffer();
@@ -141,6 +166,7 @@ async function open(name, blob, { useCache = true } = {}) {
   $('roll').focus();
   let runtime = '';
   const result = { name, mode: runMode, duration, notes: [], order: [] };
+  results = result.notes;
   window.basicPitch = result; // for scripted checks
   worker = new Worker('worker.js');
   worker.onmessage = ({ data: m }) => {
@@ -153,6 +179,7 @@ async function open(name, blob, { useCache = true } = {}) {
       roll.addNotes(m.notes);
       result.notes.push(...m.notes);
       result.order.push(m.window);
+      if (m.notes.length) synthNotes();
       const secs = Math.min(duration, (m.done * FRAMES_PER_WINDOW * 256) / SAMPLE_RATE);
       setStatus(`Transcribing ${name}… ${m.done}/${m.windows} windows${runMode === 'original' ? ' · notes come once the whole file is in' : ''}`);
       setStats(`${runtime} · ${(secs / (m.elapsedMs / 1000)).toFixed(1)}× real time`);
@@ -161,6 +188,7 @@ async function open(name, blob, { useCache = true } = {}) {
       result.notes.push(...m.notes);
       // Live notes get their velocity now that every window's activations are in.
       for (const n of result.notes) n[5] ??= velocity(meanActivation(roll.tiles, FRAMES_PER_WINDOW, n[0], n[1], n[2]));
+      synthNotes();
       finished = { name, mode: runMode, notes: result.notes };
       $('download').hidden = false;
       Object.assign(result, { done: true, elapsedMs: m.elapsedMs, modelMs: m.modelMs, decodeMs: m.decodeMs, runs: m.runs, windows: m.windows });
@@ -178,9 +206,11 @@ async function open(name, blob, { useCache = true } = {}) {
   worker.postMessage({ type: 'transcribe', audio: samples, mode: runMode, view }, [samples.buffer]);
 }
 
-// --- Playback. ---
+// --- Playback: the song through an <audio> element, the notes through a synth, mixed in one
+// AudioContext (made on the first play, which needs a click). ---
 
-let audioUrl = null, raf = 0, last = null, scrubbing = false;
+let audioUrl = null, raf = 0, last = null, results = [], graph = null;
+let listen = ['song', 'notes', 'both'].includes(recall('listen')) ? recall('listen') : 'both';
 
 function loadAudio(blob) {
   audio.pause();
@@ -188,15 +218,48 @@ function loadAudio(blob) {
   audioUrl = URL.createObjectURL(blob);
   audio.src = audioUrl;
   clock.reset();
-  $('transport').hidden = false;
+  $('player').hidden = false;
   $('play').disabled = false;
-  $('now').textContent = '–';
+}
+
+function audioGraph() {
+  if (!graph) {
+    const ctx = new AudioContext(), song = ctx.createGain(), notes = ctx.createGain();
+    ctx.createMediaElementSource(audio).connect(song).connect(ctx.destination);
+    notes.connect(ctx.destination);
+    graph = { ctx, song, notes, player: new NotePlayer(ctx, notes) };
+    window.notePlayer = graph.player; // for scripted checks
+    applyMix();
+    synthNotes();
+  }
+  graph.ctx.resume();
+  return graph;
+}
+
+function applyMix() {
+  if (!graph) return;
+  const g = mix(listen);
+  graph.song.gain.value = g.song;
+  graph.notes.gain.value = g.notes;
+}
+
+// The notes the synth plays: velocities of live notes come from the activations seen so far.
+function synthNotes() {
+  if (!graph) return;
+  graph.player.setNotes(results.map(([s, e, pitch, , , vel]) => ({
+    t0: frameToTime(s), t1: frameToTime(e), pitch,
+    velocity: vel ?? velocity(meanActivation(roll.tiles, FRAMES_PER_WINDOW, s, e, pitch)),
+  })));
+}
+
+for (const input of document.querySelectorAll('input[name="listen"]')) {
+  input.checked = input.value === listen;
+  input.addEventListener('change', () => { listen = input.value; remember('listen', listen); applyMix(); });
 }
 
 function showTime(t) {
   const text = formatTime(t);
   if ($('time').textContent !== text) $('time').textContent = text;
-  if (!scrubbing) $('seek').value = t;
 }
 
 function frame(now) {
@@ -205,6 +268,7 @@ function frame(now) {
   last = { t, now };
   roll.setPlayhead(t, motion);
   showTime(t);
+  if (!audio.paused) graph?.player.tick(t);
   raf = audio.paused ? 0 : requestAnimationFrame(frame);
 }
 
@@ -212,52 +276,53 @@ function seek(t) {
   audio.currentTime = t;
   clock.reset();
   last = null;
+  graph?.player.reset();
   roll.setPlayhead(t);
   roll.reveal();
-  if (!audio.paused) roll.follow(true);
   showTime(t);
 }
 
 function toggle() {
   if (!audio.src) return;
   if (!audio.paused) return audio.pause();
+  audioGraph();
   if (audio.ended || audio.currentTime >= roll.duration - 0.05) seek(0);
   audio.play().catch((err) => setStats(`Can't play this file here: ${err.message}`));
 }
 
 audio.addEventListener('play', () => {
-  $('play').textContent = 'Pause';
+  $('player').classList.add('playing');
+  $('play').setAttribute('aria-label', 'Pause');
   last = null;
+  graph?.player.reset();
   roll.follow(true);
   if (!raf) raf = requestAnimationFrame(frame);
 });
 const paused = () => {
-  $('play').textContent = 'Play';
-  roll.follow(false);
-  $('follow').hidden = true;
+  $('player').classList.remove('playing');
+  $('play').setAttribute('aria-label', 'Play');
+  graph?.player.reset();
   const t = clock.time();
   roll.setPlayhead(t);
   showTime(t);
 };
 audio.addEventListener('pause', paused);
 audio.addEventListener('ended', paused);
-audio.addEventListener('seeking', () => clock.reset());
+audio.addEventListener('seeking', () => { clock.reset(); graph?.player.reset(); });
 audio.addEventListener('error', () => {
+  if (!audio.getAttribute('src')) return;
   $('play').disabled = true;
-  $('now').textContent = "this browser can't play the file";
+  setStats("This browser can't play the file.");
 });
 
 $('play').addEventListener('click', toggle);
 $('follow').addEventListener('click', () => roll.follow(true));
-const scrub = $('seek');
-scrub.addEventListener('pointerdown', () => { scrubbing = true; });
-scrub.addEventListener('input', () => seek(+scrub.value));
-scrub.addEventListener('change', () => { scrubbing = false; });
-addEventListener('pointerup', () => { scrubbing = false; });
+$('zoom-in').addEventListener('click', () => roll.zoomBy(1.5));
+$('zoom-out').addEventListener('click', () => roll.zoomBy(1 / 1.5));
 
 // Space plays and pauses, except where it means something already (buttons, text, radios).
 addEventListener('keydown', (e) => {
-  if (e.key !== ' ' || e.repeat || $('panel-transcribe').hidden || e.target.closest?.('button, textarea, select, label') || (e.target.tagName === 'INPUT' && e.target.type !== 'range')) return;
+  if (e.key !== ' ' || e.repeat || $('panel-transcribe').hidden || e.target.closest?.('button, textarea, select, label') || e.target.tagName === 'INPUT') return;
   e.preventDefault();
   toggle();
 });

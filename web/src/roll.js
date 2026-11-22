@@ -29,6 +29,7 @@ const isBlack = (p) => [1, 3, 6, 8, 10].includes(p % 12);
 export class PianoRoll {
   constructor(canvas, frameToTime, { onView = () => {}, onNote = () => {}, onSeek = () => {}, onSounding = () => {}, onFollow = () => {} } = {}) {
     Object.assign(this, { canvas, frameToTime, onView, onNote, onSeek, onSounding, onFollow, ctx: canvas.getContext('2d') });
+    this.layers = { heat: true, notes: true }; // the model's output before decoding, and the notes
     this.reset(0, 0);
     new ResizeObserver(() => this.#resize()).observe(canvas);
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.#readColors());
@@ -105,6 +106,18 @@ export class PianoRoll {
   select(note) {
     this.selected = note;
     this.request();
+  }
+
+  // Show or hide the model's raw output (the heat map) and the notes, like map layers.
+  setLayers(layers) {
+    Object.assign(this.layers, layers);
+    if (!this.layers.notes) { this.hover = null; this.selected = null; }
+    this.request();
+  }
+
+  // Zoom around the middle of the view (or the playhead while following it).
+  zoomBy(factor) {
+    if (this.pps !== null) this.#zoomAt(GUTTER + this.#plotWidth() / 2, factor);
   }
 
   fit() {
@@ -216,7 +229,7 @@ export class PianoRoll {
 
   // The note under a point on the canvas, if any.
   #noteAt(x, y) {
-    if (this.pps === null || x < GUTTER || y < 0 || y >= this.#plotHeight()) return null;
+    if (this.pps === null || !this.layers.notes || x < GUTTER || y < 0 || y >= this.#plotHeight()) return null;
     const pitch = HI - Math.floor(y / (this.#plotHeight() / N_PITCHES));
     return noteAt(this.notes, this.#timeAt(x), pitch, HIT / this.pps);
   }
@@ -370,7 +383,7 @@ export class PianoRoll {
       const [a, b] = this.#span(w, w + 1);
       if (b >= this.t0 && a <= t1) visible.push(w);
     }
-    if (visible.length) {
+    if (visible.length && this.layers.heat) {
       const fine = (this.pps * this.duration) / Math.max(1, this.totalFrames) >= 0.5;
       if (fine) {
         for (const w of visible) {
@@ -385,6 +398,8 @@ export class PianoRoll {
           ctx.drawImage(this.#groupCanvas(gi), x(a), 0, (b - a) * this.pps, plotH);
         }
       }
+    }
+    if (visible.length) {
       const view = `${visible[0]},${visible[visible.length - 1]}`;
       if (view !== this.lastView) { this.lastView = view; this.onView(visible[0], visible[visible.length - 1]); }
     }
@@ -393,7 +408,8 @@ export class PianoRoll {
       return [nx, ny, nw, nh];
     };
     ctx.lineWidth = 1;
-    for (const n of this.notes) {
+    const shownNotes = this.layers.notes ? this.notes : [];
+    for (const n of shownNotes) {
       if (n.t1 < this.t0 || n.t0 > t1 || lit.has(n)) continue;
       const [nx, ny, nw, nh] = rect(n);
       ctx.fillStyle = k.note;
@@ -404,7 +420,7 @@ export class PianoRoll {
     ctx.fillStyle = k.active;
     ctx.shadowColor = k.active;
     ctx.shadowBlur = 8;
-    for (const n of sounding) {
+    for (const n of this.layers.notes ? sounding : []) {
       const [nx, ny, nw, nh] = rect(n);
       ctx.fillRect(nx, ny - 1, nw, nh + 2);
     }
