@@ -1,7 +1,7 @@
 // Note names, hit testing for hover and click, and which notes sound under the playhead.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { noteName, noteHz, noteAt, soundingAt } from '../src/notes.js';
+import { noteName, noteHz, noteAt, soundingAt, meanActivation } from '../src/notes.js';
 
 test('notes are named with octave numbers, C4 = MIDI 60', () => {
   assert.deepEqual([21, 60, 61, 69, 70, 108].map(noteName), ['A0', 'C4', 'C♯4', 'A4', 'A♯4', 'C8']);
@@ -42,4 +42,13 @@ test('sounding notes start at or before the playhead and end after it, lowest fi
   assert.deepEqual(soundingAt(notes, 2.0), [notes[1], notes[2]]);
   assert.deepEqual(soundingAt(notes, 3.0), []);
   assert.deepEqual(soundingAt(notes, 0.1), []);
+});
+
+test('a note\'s mean activation comes from the byte tiles of the windows it spans', () => {
+  // Two windows of 2 frames each; pitch index 1 (MIDI 22) has 51, 102, 153, 204 over frames 0-3.
+  const tile = (a, b) => { const t = new Uint8Array(2 * 88); t[1] = a; t[88 + 1] = b; return t; };
+  const tiles = [tile(51, 102), tile(153, 204)];
+  assert.equal(meanActivation(tiles, 2, 1, 3, 22), (102 + 153) / 2 / 255);
+  assert.equal(meanActivation(tiles, 2, 0, 4, 22), (51 + 102 + 153 + 204) / 4 / 255);
+  assert.equal(meanActivation([tiles[0], null], 2, 1, 4, 22), (102 + 0 + 0) / 3 / 255);
 });

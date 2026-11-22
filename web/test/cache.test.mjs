@@ -13,8 +13,8 @@ test('file keys depend on the bytes, the mode and the result version', async () 
   assert.ok(a.startsWith(`v${RESULT_VERSION}:`));
 });
 
-test('pack and unpack keep notes and activations', () => {
-  const notes = [[0, 10, 60, 2, 12], [5, 40, 72, 9, 45]];
+test('pack and unpack keep notes (with velocities) and activations', () => {
+  const notes = [[0, 10, 60, 2, 12, 90], [5, 40, 72, -1, -1, 64]];
   const activation = Uint8Array.from({ length: 3 * 88 }, (_, i) => i % 256);
   const rec = unpack(structuredClone(pack({ key: 'k', name: 'x.wav', duration: 1.5, totalFrames: 3, notes, activation })));
   assert.deepEqual(rec.notes, notes);

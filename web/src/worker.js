@@ -9,6 +9,7 @@ import { FRAMES_PER_WINDOW, N_PITCHES, nOutputFrames, toByte, windowAt, windowFr
 import { DEFAULT_PARAMS } from './hmm.js';
 import { WindowedDecoder, nextWindow, nextMissing } from './segments.js';
 import { originalNotes } from './original.js';
+import { velocity } from './midi.js';
 
 const WASM_DIR = new URL('wasm/', self.location.href).href;
 let loaded;
@@ -83,7 +84,7 @@ async function transcribe(audio, mode) {
     }
     // Original notes have no "final at" frames: they are only final once the whole file is in.
     const a = performance.now();
-    const notes = live ? [] : originalNotes(whole.note, whole.onset).map(([s, e, pitch]) => [s, e, pitch, -1, -1]);
+    const notes = live ? [] : originalNotes(whole.note, whole.onset).map(([s, e, pitch, amp]) => [s, e, pitch, -1, -1, velocity(amp)]);
     const decodeMs = performance.now() - a;
     self.postMessage({ type: 'done', totalFrames, windows: nWin, notes, runs, modelMs, decodeMs, elapsedMs: performance.now() - t1 });
   } catch (err) {

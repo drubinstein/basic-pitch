@@ -5,11 +5,13 @@ import { FRAMES_PER_WINDOW, N_PITCHES, SAMPLE_RATE, frameToTime, nOutputFrames }
 import { PianoRoll } from './roll.js';
 import * as cache from './cache.js';
 import { Clock, formatTime } from './playback.js';
-import { noteName, noteHz } from './notes.js';
+import { noteName, noteHz, meanActivation } from './notes.js';
+import { toMidi, velocity } from './midi.js';
 
 const $ = (id) => document.getElementById(id);
 const audio = $('audio'), clock = new Clock(audio);
 let worker = null, view = [0, Infinity], current = null, opened = 0, mode = savedMode();
+let finished = null; // { name, mode, notes } once the open file's notes are all in
 
 const roll = new PianoRoll($('roll'), frameToTime, {
   onView: (first, last) => {
@@ -75,9 +77,11 @@ function showCached(name, hit) {
   for (let w = 0; w * FRAMES_PER_WINDOW < hit.totalFrames; w++) roll.addTile(w, hit.activation.subarray(w * step, (w + 1) * step));
   roll.addNotes(hit.notes);
   window.basicPitch = { name, mode, duration: hit.duration, notes: hit.notes, done: true, fromCache: true };
+  finished = { name, mode, notes: hit.notes };
   setStatus(`${name}: ${hit.notes.length} notes`);
   setStats(`${modeLabel()} · saved in this browser from an earlier run.`);
   $('again').hidden = false;
+  $('download').hidden = false;
 }
 
 const modeLabel = () => (mode === 'original' ? 'Original (melodia trick)' : 'Live (streaming HMM)');
@@ -89,7 +93,9 @@ async function open(name, blob, { useCache = true } = {}) {
   worker = null;
   if (current?.blob !== blob) loadAudio(blob);
   current = { name, blob };
+  finished = null;
   $('again').hidden = true;
+  $('download').hidden = true;
   setStatus(`Decoding ${name}…`);
   setStats('');
   const bytes = await blob.arrayBuffer();
@@ -131,6 +137,10 @@ async function open(name, blob, { useCache = true } = {}) {
     } else if (m.type === 'done') {
       roll.addNotes(m.notes);
       result.notes.push(...m.notes);
+      // Live notes get their velocity now that every window's activations are in.
+      for (const n of result.notes) n[5] ??= velocity(meanActivation(roll.tiles, FRAMES_PER_WINDOW, n[0], n[1], n[2]));
+      finished = { name, mode: runMode, notes: result.notes };
+      $('download').hidden = false;
       Object.assign(result, { done: true, elapsedMs: m.elapsedMs, modelMs: m.modelMs, decodeMs: m.decodeMs, runs: m.runs, windows: m.windows });
       $('again').hidden = false;
       setStatus(`${name}: ${result.notes.length} notes`);
@@ -268,6 +278,18 @@ $('example').addEventListener('click', async () => {
 
 $('again').addEventListener('click', () => current && open(current.name, current.blob, { useCache: false }));
 $('fit').addEventListener('click', () => roll.fit());
+
+// MIDI like basic-pitch's (no pitch bends), named like its <name>_basic_pitch.mid.
+$('download').addEventListener('click', () => {
+  if (!finished) return;
+  const notes = finished.notes.map(([s, e, pitch, , , vel]) => ({ t0: frameToTime(s), t1: frameToTime(e), pitch, velocity: vel }));
+  const base = finished.name.replace(/\.[^.]+$/, '');
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([toMidi(notes)], { type: 'audio/midi' }));
+  link.download = `${base}_basic_pitch${finished.mode === 'live' ? '_live' : ''}.mid`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+});
 $('forget').addEventListener('click', async () => {
   await cache.clear();
   setStats('Cleared the results saved in this browser.');

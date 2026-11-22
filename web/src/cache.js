@@ -1,7 +1,7 @@
 // Finished transcriptions are kept in this browser's IndexedDB, keyed by a hash of the file's
 // bytes and the decoding mode, so opening the same file again is instant. Only the newest KEEP results are kept. Any
 // storage error just means no caching.
-export const RESULT_VERSION = 2; // bump when the model, windowing or decoders change
+export const RESULT_VERSION = 3; // bump when the model, windowing or decoders change
 const DB_NAME = 'basic-pitch-live', STORE = 'results', KEEP = 12;
 
 export async function fileKey(bytes, mode) {
@@ -10,16 +10,18 @@ export async function fileKey(bytes, mode) {
   return `v${RESULT_VERSION}:${mode}:` + Array.from(hash, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-// notes: [start, end, pitch, start final at, end final at] frames; activation: totalFrames x 88 bytes.
+// notes: [start, end, pitch, start final at, end final at (frames), velocity]; activation:
+// totalFrames x 88 bytes.
+const FIELDS = 6;
 export function pack({ key, name, duration, totalFrames, notes, activation }) {
-  const flat = new Int32Array(notes.length * 5);
-  notes.forEach((n, i) => flat.set(n, i * 5));
+  const flat = new Int32Array(notes.length * FIELDS);
+  notes.forEach((n, i) => { for (let j = 0; j < FIELDS; j++) flat[i * FIELDS + j] = n[j] ?? 0; });
   return { key, name, duration, totalFrames, notes: flat, activation, savedAt: Date.now() };
 }
 
 export function unpack(rec) {
   const notes = [];
-  for (let i = 0; i < rec.notes.length; i += 5) notes.push(Array.from(rec.notes.subarray(i, i + 5)));
+  for (let i = 0; i < rec.notes.length; i += FIELDS) notes.push(Array.from(rec.notes.subarray(i, i + FIELDS)));
   return { ...rec, notes };
 }
 
