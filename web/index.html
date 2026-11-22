@@ -13,12 +13,14 @@
       --bg: #f7f7f5; --surface: #ffffff; --text: #1d1d1f; --text-muted: #6b6b70; --border: #dcdcdf;
       --accent: #2f6fde; --accent-strong: #1d4fae; --heat: #e0782f;
       --roll-bg: #ffffff; --roll-black-key: #f1f1f3; --roll-grid: #e2e2e6; --roll-pending: rgba(127, 127, 135, 0.08);
+      --key-white: #fbfbfc; --key-black: #3a3a40; --note-active: #12a150; --playhead: #d6402f;
     }
     @media (prefers-color-scheme: dark) {
       :root {
         --bg: #121214; --surface: #1b1b1e; --text: #ececef; --text-muted: #9a9aa2; --border: #303036;
         --accent: #6f9cf0; --accent-strong: #a9c4f7; --heat: #f0a050;
         --roll-bg: #161618; --roll-black-key: #1d1d21; --roll-grid: #2a2a30; --roll-pending: rgba(160, 160, 170, 0.07);
+        --key-white: #2a2a2f; --key-black: #0c0c0e; --note-active: #3ddc84; --playhead: #ff6b5b;
       }
     }
     * { box-sizing: border-box; }
@@ -32,11 +34,33 @@
     .file input { display: none; }
     #status { font-weight: 550; }
     .meta { padding: 0 16px 8px; display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--text-muted); font-size: 13px; }
+    button:disabled { opacity: 0.5; cursor: default; }
+    .modes { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+    .modes label { font-size: 14px; padding: 6px 11px; cursor: pointer; }
+    .modes label + label { border-left: 1px solid var(--border); }
+    .modes input { position: absolute; opacity: 0; pointer-events: none; }
+    .modes label:has(input:checked) { background: var(--accent); color: #fff; }
+    .modes label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .transport { padding: 0 16px 8px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 13px; }
+    .transport #play { min-width: 64px; }
+    .transport .clock { font-variant-numeric: tabular-nums; color: var(--text-muted); }
+    #seek { flex: 1 1 240px; min-width: 160px; accent-color: var(--accent); }
+    .playing { font-variant-numeric: tabular-nums; min-width: 9em; }
+    .playing b { color: var(--note-active); font-weight: 650; }
     main { flex: 1; min-height: 320px; padding: 0 16px 12px; display: flex; }
+    #stage { position: relative; flex: 1; display: flex; min-width: 0; }
     #roll { flex: 1; width: 100%; height: 100%; border: 1px solid var(--border); border-radius: 10px; touch-action: none; cursor: grab; outline: none; }
     #roll:active { cursor: grabbing; }
     #roll:focus-visible { border-color: var(--accent); }
+    #tip { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 2; max-width: 280px; background: var(--surface); color: var(--text);
+      border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; line-height: 1.4; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18); }
+    #tip .tip-name { font-size: 15px; font-weight: 650; }
+    #tip .tip-name span { font-size: 12px; font-weight: 400; color: var(--text-muted); margin-left: 4px; }
+    #tip .tip-lag { color: var(--text-muted); }
+    #drop { position: fixed; inset: 10px; z-index: 10; pointer-events: none; display: grid; place-items: center; border: 3px dashed var(--accent);
+      border-radius: 16px; background: color-mix(in srgb, var(--accent) 12%, transparent); font-size: 20px; font-weight: 600; color: var(--accent-strong); }
     footer { padding: 0 16px 14px; color: var(--text-muted); font-size: 12px; }
+    footer p { margin: 0 0 4px; }
     a { color: var(--accent); }
     .link { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
     [hidden] { display: none !important; }
@@ -48,21 +72,43 @@
     <div class="controls">
       <label class="file">Open audio…<input id="file" type="file" accept="audio/*"></label>
       <button id="example" type="button">Try an example</button>
+      <div class="modes" role="radiogroup" aria-label="How notes are made">
+        <label title="Streaming HMM decoder: notes appear while the file is transcribed, each as soon as it is final"><input type="radio" name="mode" value="live" checked> Live</label>
+        <label title="Basic Pitch's own note creation with the melodia trick, as in the basic-pitch package: notes appear once the whole file is transcribed"><input type="radio" name="mode" value="original"> Original</label>
+      </div>
       <button id="fit" type="button">Fit</button>
       <button id="again" type="button" hidden>Run again</button>
     </div>
   </header>
   <div class="meta">
-    <span id="status">Open an audio file or drop one here. It stays on your machine.</span>
+    <span id="status">Open an audio file or drop one anywhere on this page. It stays on your machine.</span>
     <span id="stats"></span>
   </div>
-  <main><canvas id="roll" tabindex="0" aria-label="Piano roll of transcribed notes"></canvas></main>
+  <div id="transport" class="transport" hidden>
+    <button id="play" type="button">Play</button>
+    <span class="clock"><span id="time">0:00.0</span> / <span id="total">0:00.0</span></span>
+    <input id="seek" type="range" min="0" max="1" step="0.01" value="0" aria-label="Playback position">
+    <span class="playing">Playing: <b id="now">–</b></span>
+    <button id="follow" type="button" hidden>Follow playhead</button>
+  </div>
+  <main>
+    <div id="stage">
+      <canvas id="roll" tabindex="0" aria-label="Piano roll of transcribed notes"></canvas>
+      <div id="tip" role="tooltip" hidden></div>
+    </div>
+  </main>
+  <div id="drop" hidden>Drop an audio file to transcribe it</div>
+  <audio id="audio" preload="auto"></audio>
   <footer>
-    Drag or scroll sideways to pan · pinch, ctrl+scroll or scroll to zoom · double-click to zoom in · 0 to fit.
-    Whatever is on screen is transcribed first.
-    Model: <a href="https://github.com/spotify/basic-pitch">Basic Pitch</a> (Spotify) on LiteRT.js, decoded with a streaming HMM.
+    <p>Drag or scroll sideways to pan · pinch, ctrl+scroll or scroll to zoom · double-click to zoom in · 0 to fit ·
+    space to play or pause · click empty space to jump there · hover or click a note for details.
+    Whatever is on screen is transcribed first.</p>
+    <p><b>Live</b> makes notes with a streaming HMM as the model runs; <b>Original</b> uses Basic Pitch's own note
+    creation with the melodia trick once the whole file is in. <a href="report.html">What we tried, and why</a> ·
+    Spotify's <a href="https://basicpitch.spotify.com/">original Basic Pitch demo</a>.</p>
+    <p>Model: <a href="https://github.com/spotify/basic-pitch">Basic Pitch</a> (Spotify) on LiteRT.js.
     Example: vocadito track 10. Results are saved in this browser (<button id="forget" class="link" type="button">clear</button>).
-    <a href="https://github.com/drubinstein/basic-pitch/tree/main/web">Source</a>
+    <a href="https://github.com/drubinstein/basic-pitch/tree/main/web">Source</a></p>
   </footer>
   <script type="module" src="app.js"></script>
 </body>

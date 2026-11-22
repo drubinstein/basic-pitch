@@ -151,3 +151,15 @@ export function nextWindow(dec, first, last) {
   for (let i = 0; i < n; i++) { const r = want((first + i) % n); if (r >= 0) return r; }
   return -1;
 }
+
+// For a decoder that needs the whole file (no pre-roll, nothing to close out): the first window
+// not done yet, on screen first, then from the view onwards, wrapping around. -1 when all are done.
+export function nextMissing(done, first, last) {
+  const n = done.length;
+  if (n === 0) return -1;
+  first = Math.min(Math.max(0, first), n - 1);
+  last = Math.min(Math.max(first, last), n - 1);
+  for (let w = first; w <= last; w++) if (!done[w]) return w;
+  for (let i = 0; i < n; i++) if (!done[(first + i) % n]) return (first + i) % n;
+  return -1;
+}

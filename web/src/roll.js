@@ -4,21 +4,31 @@
 // canvas only when visible (an LRU keeps the recent ones); zoomed far out, groups of windows are
 // drawn from coarser tiles instead. Windows arrive in any order; `onView` reports what's visible
 // so those can be transcribed first.
+//
+// During playback a playhead crosses the roll, the notes under it and their keys on the keyboard
+// light up, and the view follows the playhead until the user pans away. Hovering a note or
+// clicking it reports it through `onNote` (for a tooltip); clicking empty space asks to seek there.
 import { FRAMES_PER_WINDOW, N_PITCHES, MIDI_OFFSET } from './pipeline.js';
+import { noteAt, soundingAt } from './notes.js';
+import { followT0 } from './playback.js';
 
 const LO = MIDI_OFFSET, HI = MIDI_OFFSET + N_PITCHES - 1;
 const MAX_PPS = 4000; // pixels per second at full zoom
-const GUTTER = 36; // left gutter for octave labels
+const GUTTER = 40; // left gutter: the keyboard
+const BLACK_KEY = 24; // width of a black key in the keyboard
 const AXIS = 22; // bottom axis height
 const STEPS = [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
 const LRU = 384; // window canvases kept
 const GROUP = 8; // windows per coarse tile
+const CLICK = 4; // pixels a pointer can move and still click rather than drag
+const HIT = 4; // pixels of slack when hitting short notes
 
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const isBlack = (p) => [1, 3, 6, 8, 10].includes(p % 12);
 
 export class PianoRoll {
-  constructor(canvas, frameToTime, onView = () => {}) {
-    Object.assign(this, { canvas, frameToTime, onView, ctx: canvas.getContext('2d') });
+  constructor(canvas, frameToTime, { onView = () => {}, onNote = () => {}, onSeek = () => {}, onSounding = () => {}, onFollow = () => {} } = {}) {
+    Object.assign(this, { canvas, frameToTime, onView, onNote, onSeek, onSounding, onFollow, ctx: canvas.getContext('2d') });
     this.reset(0, 0);
     new ResizeObserver(() => this.#resize()).observe(canvas);
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.#readColors());
@@ -37,6 +47,12 @@ export class PianoRoll {
     this.t0 = 0;
     this.pps = null; // fit on next draw
     this.lastView = '';
+    this.playhead = null; // seconds, once there's audio
+    this.following = false;
+    this.hover = null;
+    this.selected = null;
+    this.sounding = [];
+    this.shown = null;
     this.request();
   }
 
@@ -52,6 +68,57 @@ export class PianoRoll {
     const out = new Uint8Array(this.totalFrames * N_PITCHES);
     this.tiles.forEach((a, w) => a && out.set(a, w * FRAMES_PER_WINDOW * N_PITCHES));
     return out;
+  }
+
+  // notes: [start, end, pitch, frame when the start was final, frame when the end was final]; the
+  // "final" frames are -1 for notes that are only final once the whole file is in.
+  addNotes(notes) {
+    const time = this.frameToTime;
+    for (const [s, e, pitch, onWhen] of notes) this.notes.push({ t0: time(s), t1: time(e), pitch, lag: onWhen >= 0 ? time(onWhen + 1) - time(s) : null });
+    this.request();
+  }
+
+  // Move the playhead to t seconds. While playing, pass how far it moved since the last frame
+  // (`advance`) and the wall time since then (`dt`) so the view can follow.
+  setPlayhead(t, motion = null) {
+    this.playhead = t;
+    if (motion && this.following && this.pps !== null) {
+      this.t0 = followT0({ t0: this.t0, span: this.#plotWidth() / this.pps, t, duration: this.duration, ...motion });
+    }
+    this.request();
+  }
+
+  // Bring the playhead on screen if it isn't.
+  reveal() {
+    if (this.playhead === null || this.pps === null) return;
+    this.t0 = followT0({ t0: this.t0, span: this.#plotWidth() / this.pps, t: this.playhead, duration: this.duration, advance: 0, dt: 0 });
+    this.request();
+  }
+
+  // Follow the playhead (while playing), or stop.
+  follow(on) {
+    this.following = on;
+    if (on) this.reveal();
+    this.onFollow(on);
+  }
+
+  select(note) {
+    this.selected = note;
+    this.request();
+  }
+
+  fit() {
+    const w = this.#plotWidth();
+    this.pps = Math.min(MAX_PPS, w / Math.max(this.duration, 1));
+    this.t0 = 0;
+    this.request();
+  }
+
+  request() {
+    if (!this.pending) {
+      this.pending = true;
+      requestAnimationFrame(() => { this.pending = false; this.#draw(); });
+    }
   }
 
   #frames(w) { return Math.min(FRAMES_PER_WINDOW, this.totalFrames - w * FRAMES_PER_WINDOW); }
@@ -101,35 +168,23 @@ export class PianoRoll {
     return c;
   }
 
-  addNotes(notes) {
-    for (const [s, e, pitch] of notes) this.notes.push({ t0: this.frameToTime(s), t1: this.frameToTime(e), pitch });
-    this.request();
-  }
-
-  fit() {
-    const w = this.#plotWidth();
-    this.pps = Math.min(MAX_PPS, w / Math.max(this.duration, 1));
-    this.t0 = 0;
-    this.request();
-  }
-
-  request() {
-    if (!this.pending) {
-      this.pending = true;
-      requestAnimationFrame(() => { this.pending = false; this.#draw(); });
-    }
-  }
-
   #readColors() {
     const hex = (v) => { const n = parseInt(v.replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
-    this.colors = { bg: css('--roll-bg'), black: css('--roll-black-key'), grid: css('--roll-grid'), text: css('--text-muted'), note: css('--accent'), noteEdge: css('--accent-strong'), pending: css('--roll-pending'), heat: hex(css('--heat')) };
+    this.colors = {
+      bg: css('--roll-bg'), black: css('--roll-black-key'), grid: css('--roll-grid'), text: css('--text-muted'), strong: css('--text'),
+      note: css('--accent'), noteEdge: css('--accent-strong'), pending: css('--roll-pending'), heat: hex(css('--heat')),
+      keyWhite: css('--key-white'), keyBlack: css('--key-black'), active: css('--note-active'), playhead: css('--playhead'),
+    };
     this.canvases.clear(); // tiles are painted in the heat colour
     this.coarse.clear();
     this.request();
   }
 
   #plotWidth() { return this.canvas.clientWidth - GUTTER; }
+  #plotHeight() { return this.canvas.clientHeight - AXIS; }
   #minPps() { return Math.min(MAX_PPS, this.#plotWidth() / Math.max(this.duration, 1)); }
+  #timeAt(x) { return this.t0 + (x - GUTTER) / this.pps; }
+  #xAt(t) { return GUTTER + (t - this.t0) * this.pps; }
 
   #clamp() {
     this.pps = Math.min(MAX_PPS, Math.max(this.#minPps(), this.pps));
@@ -138,7 +193,12 @@ export class PianoRoll {
   }
 
   #zoomAt(x, factor) {
-    const t = this.t0 + (x - GUTTER) / this.pps;
+    // While following, zoom around the playhead so it stays put.
+    if (this.following && this.playhead !== null) {
+      const px = this.#xAt(this.playhead);
+      if (px >= GUTTER && px <= this.canvas.clientWidth) x = px;
+    }
+    const t = this.#timeAt(x);
     this.pps *= factor;
     this.#clamp();
     this.t0 = t - (x - GUTTER) / this.pps;
@@ -146,15 +206,39 @@ export class PianoRoll {
     this.request();
   }
 
+  // A pan by the user stops the view following the playhead.
   #pan(dx) {
+    if (this.following) { this.following = false; this.onFollow(false); }
     this.t0 -= dx / this.pps;
     this.#clamp();
     this.request();
   }
 
+  // The note under a point on the canvas, if any.
+  #noteAt(x, y) {
+    if (this.pps === null || x < GUTTER || y < 0 || y >= this.#plotHeight()) return null;
+    const pitch = HI - Math.floor(y / (this.#plotHeight() / N_PITCHES));
+    return noteAt(this.notes, this.#timeAt(x), pitch, HIT / this.pps);
+  }
+
+  #setHover(note, x = null) {
+    if (note === this.hover && x === this.hoverX) return;
+    this.hover = note;
+    this.hoverX = x;
+    this.canvas.style.cursor = note ? 'pointer' : '';
+    this.request();
+  }
+
+  #click(x, y) {
+    const note = this.#noteAt(x, y);
+    if (note) return this.select(note === this.selected ? null : note);
+    this.select(null);
+    if (x >= GUTTER && this.duration > 0) this.onSeek(Math.min(this.duration, Math.max(0, this.#timeAt(x))));
+  }
+
   #bind() {
     const c = this.canvas, pointers = new Map();
-    let pinch = null;
+    let pinch = null, press = null;
     c.addEventListener('wheel', (e) => {
       e.preventDefault();
       const x = e.offsetX;
@@ -166,26 +250,42 @@ export class PianoRoll {
     c.addEventListener('pointerdown', (e) => {
       c.setPointerCapture(e.pointerId);
       pointers.set(e.pointerId, e.offsetX);
+      press = pointers.size === 1 ? { x: e.offsetX, y: e.offsetY, dragging: false } : null;
       if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = { d: Math.abs(a - b) || 1 }; }
     });
     c.addEventListener('pointermove', (e) => {
-      if (!pointers.has(e.pointerId)) return;
+      if (!pointers.has(e.pointerId)) return this.#setHover(this.#noteAt(e.offsetX, e.offsetY), e.offsetX);
       const prev = pointers.get(e.pointerId);
-      pointers.set(e.pointerId, e.offsetX);
-      if (pointers.size === 1) this.#pan(e.offsetX - prev);
-      else if (pinch) {
+      if (pointers.size === 1) {
+        // Small movements still count as a click; past that, drag the view.
+        if (press && !press.dragging && Math.hypot(e.offsetX - press.x, e.offsetY - press.y) < CLICK) return;
+        if (press) press.dragging = true;
+        pointers.set(e.pointerId, e.offsetX);
+        this.#setHover(null);
+        this.#pan(e.offsetX - prev);
+      } else if (pinch) {
+        pointers.set(e.pointerId, e.offsetX);
         const [a, b] = [...pointers.values()], d = Math.abs(a - b) || 1;
         this.#zoomAt((a + b) / 2, d / pinch.d);
         pinch.d = d;
       }
     });
-    const up = (e) => { pointers.delete(e.pointerId); if (pointers.size < 2) pinch = null; };
+    const up = (e) => {
+      if (e.type === 'pointerup' && press && !press.dragging && pointers.size === 1) this.#click(e.offsetX, e.offsetY);
+      pointers.delete(e.pointerId);
+      press = null;
+      if (pointers.size < 2) pinch = null;
+    };
     c.addEventListener('pointerup', up);
     c.addEventListener('pointercancel', up);
+    c.addEventListener('pointerleave', () => pointers.size === 0 && this.#setHover(null));
     c.addEventListener('dblclick', (e) => this.#zoomAt(e.offsetX, e.shiftKey ? 0.5 : 2));
     c.addEventListener('keydown', (e) => {
       const mid = GUTTER + this.#plotWidth() / 2, step = this.#plotWidth() * 0.2;
-      const keys = { '+': () => this.#zoomAt(mid, 1.5), '=': () => this.#zoomAt(mid, 1.5), '-': () => this.#zoomAt(mid, 1 / 1.5), '0': () => this.fit(), ArrowLeft: () => this.#pan(step), ArrowRight: () => this.#pan(-step) };
+      const keys = {
+        '+': () => this.#zoomAt(mid, 1.5), '=': () => this.#zoomAt(mid, 1.5), '-': () => this.#zoomAt(mid, 1 / 1.5), '0': () => this.fit(),
+        ArrowLeft: () => this.#pan(step), ArrowRight: () => this.#pan(-step), Escape: () => this.select(null),
+      };
       if (keys[e.key]) { e.preventDefault(); keys[e.key](); }
     });
   }
@@ -203,27 +303,49 @@ export class PianoRoll {
     const { ctx, colors: k } = this, W = this.canvas.clientWidth, H = this.canvas.clientHeight;
     if (!W || !H) return;
     if (this.pps === null) this.fit();
-    const plotH = H - AXIS, row = plotH / N_PITCHES, x = (t) => GUTTER + (t - this.t0) * this.pps;
+    this.#clamp();
+    const plotH = H - AXIS, row = plotH / N_PITCHES, x = (t) => this.#xAt(t);
     const y = (pitch) => (HI - pitch) * row, t1 = this.t0 + this.#plotWidth() / this.pps;
+    const ph = this.playhead;
+    const sounding = ph === null ? [] : soundingAt(this.notes, ph);
+    if (sounding.length !== this.sounding.length || sounding.some((n, i) => n !== this.sounding[i])) {
+      this.sounding = sounding;
+      this.onSounding(sounding);
+    }
+    const lit = new Set(sounding), litKeys = new Set(sounding.map((n) => n.pitch));
+
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = k.bg;
     ctx.fillRect(0, 0, W, H);
 
     // Black-key rows and octave lines at each C.
     for (let p = LO; p <= HI; p++) {
-      if ([1, 3, 6, 8, 10].includes(p % 12)) { ctx.fillStyle = k.black; ctx.fillRect(GUTTER, y(p), W - GUTTER, row); }
+      if (isBlack(p)) { ctx.fillStyle = k.black; ctx.fillRect(GUTTER, y(p), W - GUTTER, row); }
     }
-    ctx.fillStyle = k.text;
-    ctx.font = '11px system-ui, sans-serif';
+    for (let p = 24; p <= HI; p += 12) { ctx.fillStyle = k.grid; ctx.fillRect(GUTTER, y(p) + row - 0.5, W - GUTTER, 1); }
+
+    // Keyboard: white keys, shorter black keys, the keys of sounding notes lit, and C labels.
+    ctx.fillStyle = k.keyWhite;
+    ctx.fillRect(0, 0, GUTTER, plotH);
+    for (let p = LO; p <= HI; p++) {
+      const on = litKeys.has(p);
+      if (isBlack(p)) { ctx.fillStyle = on ? k.active : k.keyBlack; ctx.fillRect(0, y(p), BLACK_KEY, row); }
+      else if (on) { ctx.fillStyle = k.active; ctx.fillRect(0, y(p), GUTTER, row); }
+      if (p % 12 === 0 || p % 12 === 5) { ctx.fillStyle = k.grid; ctx.fillRect(0, y(p) + row - 0.5, GUTTER, 1); }
+    }
+    ctx.fillStyle = k.grid;
+    ctx.fillRect(GUTTER - 1, 0, 1, plotH);
+    ctx.font = '10px system-ui, sans-serif';
     ctx.textBaseline = 'middle';
+    ctx.textAlign = 'right';
     for (let p = 24; p <= HI; p += 12) {
-      ctx.fillStyle = k.grid;
-      ctx.fillRect(GUTTER, y(p) + row - 0.5, W - GUTTER, 1);
-      ctx.fillStyle = k.text;
-      ctx.fillText(`C${p / 12 - 1}`, 6, Math.max(8, y(p) + row / 2));
+      ctx.fillStyle = litKeys.has(p) ? k.bg : k.text;
+      ctx.fillText(`C${p / 12 - 1}`, GUTTER - 4, Math.max(6, y(p) + row / 2));
     }
+    ctx.textAlign = 'left';
 
     // Time grid.
+    ctx.font = '11px system-ui, sans-serif';
     const step = STEPS.find((s) => s * this.pps >= 90) ?? STEPS[STEPS.length - 1];
     ctx.textBaseline = 'alphabetic';
     for (let t = Math.ceil(this.t0 / step) * step; t <= t1; t += step) {
@@ -266,14 +388,34 @@ export class PianoRoll {
       const view = `${visible[0]},${visible[visible.length - 1]}`;
       if (view !== this.lastView) { this.lastView = view; this.onView(visible[0], visible[visible.length - 1]); }
     }
-    ctx.fillStyle = k.note;
-    ctx.strokeStyle = k.noteEdge;
+    const rect = (n) => {
+      const nx = x(n.t0), nw = Math.max(2, (n.t1 - n.t0) * this.pps), ny = y(n.pitch) + 0.5, nh = Math.max(2, row - 1);
+      return [nx, ny, nw, nh];
+    };
     ctx.lineWidth = 1;
     for (const n of this.notes) {
-      if (n.t1 < this.t0 || n.t0 > t1) continue;
-      const nx = x(n.t0), nw = Math.max(2, (n.t1 - n.t0) * this.pps), ny = y(n.pitch) + 0.5, nh = Math.max(2, row - 1);
+      if (n.t1 < this.t0 || n.t0 > t1 || lit.has(n)) continue;
+      const [nx, ny, nw, nh] = rect(n);
+      ctx.fillStyle = k.note;
       ctx.fillRect(nx, ny, nw, nh);
-      if (nh > 4 && nw > 4) ctx.strokeRect(nx + 0.5, ny + 0.5, nw - 1, nh - 1);
+      if (nh > 4 && nw > 4) { ctx.strokeStyle = k.noteEdge; ctx.strokeRect(nx + 0.5, ny + 0.5, nw - 1, nh - 1); }
+    }
+    // Sounding notes on top, lit and a touch taller.
+    ctx.fillStyle = k.active;
+    ctx.shadowColor = k.active;
+    ctx.shadowBlur = 8;
+    for (const n of sounding) {
+      const [nx, ny, nw, nh] = rect(n);
+      ctx.fillRect(nx, ny - 1, nw, nh + 2);
+    }
+    ctx.shadowBlur = 0;
+    // The hovered and selected notes get an outline.
+    ctx.strokeStyle = k.strong;
+    ctx.lineWidth = 2;
+    for (const n of new Set([this.selected, this.hover])) {
+      if (!n) continue;
+      const [nx, ny, nw, nh] = rect(n);
+      ctx.strokeRect(nx - 1, ny - 2, nw + 2, nh + 4);
     }
     ctx.fillStyle = k.pending;
     for (const w of visible) {
@@ -282,5 +424,30 @@ export class PianoRoll {
       ctx.fillRect(x(a), 0, (b - a) * this.pps + 1, plotH);
     }
     ctx.restore();
+
+    // Playhead, with a handle on the time axis.
+    if (ph !== null) {
+      const px = Math.round(x(ph));
+      if (px >= GUTTER - 1 && px <= W + 1) {
+        ctx.fillStyle = k.playhead;
+        ctx.fillRect(px - 1, 0, 2, plotH);
+        ctx.beginPath();
+        ctx.moveTo(px - 6, plotH);
+        ctx.lineTo(px + 6, plotH);
+        ctx.lineTo(px, plotH + 8);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    // Tell the page which note to describe: the hovered one, else the selected one, and where.
+    const shown = this.hover ?? this.selected;
+    let report = null;
+    if (shown) {
+      const [nx, ny, nw, nh] = rect(shown);
+      if (nx + nw >= GUTTER && nx <= W) report = { note: shown, x: Math.max(GUTTER, nx), y: ny, w: nw, h: nh, pointerX: shown === this.hover ? this.hoverX : null };
+    }
+    const key = report && `${report.note.t0},${report.note.pitch},${report.x},${report.y},${report.pointerX}`;
+    if (key !== this.shown) { this.shown = key; this.onNote(report); }
   }
 }

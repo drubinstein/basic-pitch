@@ -1,13 +1,13 @@
 // Finished transcriptions are kept in this browser's IndexedDB, keyed by a hash of the file's
-// bytes, so opening the same file again is instant. Only the newest KEEP results are kept. Any
+// bytes and the decoding mode, so opening the same file again is instant. Only the newest KEEP results are kept. Any
 // storage error just means no caching.
-export const RESULT_VERSION = 1; // bump when the model, windowing or decoder changes
+export const RESULT_VERSION = 2; // bump when the model, windowing or decoders change
 const DB_NAME = 'basic-pitch-live', STORE = 'results', KEEP = 12;
 
-export async function fileKey(bytes) {
+export async function fileKey(bytes, mode) {
   if (!globalThis.crypto?.subtle) return null;
   const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
-  return `v${RESULT_VERSION}:` + Array.from(hash, (b) => b.toString(16).padStart(2, '0')).join('');
+  return `v${RESULT_VERSION}:${mode}:` + Array.from(hash, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 // notes: [start, end, pitch, start final at, end final at] frames; activation: totalFrames x 88 bytes.

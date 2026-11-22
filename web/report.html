@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Streaming Basic Pitch</title>
+  <meta name="description" content="What we tried to stream Basic Pitch transcription with low latency, the results, and why the site works the way it does.">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f5; --surface: #ffffff; --text: #1d1d1f; --text-muted: #6b6b70; --border: #dcdcdf; --accent: #2f6fde; --good: #12804a;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #121214; --surface: #1b1b1e; --text: #ececef; --text-muted: #9a9aa2; --border: #303036; --accent: #6f9cf0; --good: #3ddc84; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width: 860px; margin: 0 auto; padding: 28px 16px 48px; }
+    h1 { font-size: 26px; margin: 0 0 6px; }
+    h2 { font-size: 19px; margin: 32px 0 8px; }
+    p, li { max-width: 72ch; }
+    .lede { color: var(--text-muted); margin-top: 0; }
+    a { color: var(--accent); }
+    .scroll { overflow-x: auto; margin: 12px 0; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+    th, td { padding: 6px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border); }
+    th:first-child, td:first-child { text-align: left; white-space: normal; min-width: 11em; }
+    thead th { font-weight: 600; color: var(--text-muted); font-size: 13px; }
+    tbody tr:last-child td { border-bottom: 0; }
+    tr.bar td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+    tr.shipped td:first-child { font-weight: 650; }
+    .win { color: var(--good); font-weight: 600; }
+    .note { color: var(--text-muted); font-size: 14px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Streaming Basic Pitch</h1>
+  <p class="lede">What we tried to get transcription out of Basic Pitch as fast as possible, what the numbers said, and
+  why the <a href="./">demo</a> works the way it does. November 2026.</p>
+
+  <h2>The problem</h2>
+  <p>The Basic Pitch model already runs window by window, so it can stream. The note creation step after it can't:
+  it finds onset peaks across the file, and the melodia trick repeatedly takes the strongest leftover activation
+  anywhere in the file. So notes only exist once the whole file is in. The goal was notes as the audio arrives,
+  without retraining Basic Pitch.</p>
+
+  <h2>What we tried</h2>
+  <ul>
+    <li><b>One runtime everywhere.</b> Python and the browser both run the model with LiteRT (ai-edge-litert and
+      LiteRT.js). Against the TensorFlow SavedModel, outputs differ by at most 1.5e-4, and no note changed on 14 test
+      files. A custom Rust engine was considered and dropped in favour of a maintained runtime.</li>
+    <li><b>A streaming decoder.</b> A small HMM per pitch (off, attack, sustain and gap states), decoded with
+      online Viterbi. A note becomes final once every likely path agrees on it, or after 100 frames (1.16 s) at the latest.
+      In JavaScript it takes about 15 µs per frame, about 2% of the model's time.</li>
+    <li><b>A fair baseline.</b> The original note creation was tuned too (per dataset, on the dev halves). Tuned, it
+      gains a lot: onset threshold 0.625, frame threshold 0.3, minimum length 7, energy tolerance 4, and the melodia
+      trick off.</li>
+    <li><b>Tuning the HMM.</b> Hill climbing gave all the gains. A PufferLib Protein sweep with latency as the cost
+      never beat the starting parameters at the same latency. Per-register parameters didn't carry over from dev
+      to test, and stronger re-strike handling made things worse.</li>
+    <li><b>A learned decoder.</b> A small causal network on the model's note and onset outputs (per-pitch
+      convolutions plus a 128-unit GRU across pitches), trained for about 30 minutes on a held-out split, with 0, 4 or 8
+      frames of look-ahead.</li>
+    <li><b>A ceiling check.</b> The HMM tuned directly on the vocadito test tracks, to see how good any HMM tuning could get.</li>
+  </ul>
+
+  <h2>Results</h2>
+  <p>Test halves: GuitarSet (180 tracks), MAESTRO (88) and vocadito (20). F is mir_eval's note F-measure with
+  offsets; Fno ignores offsets. "Beats" is the share of tracks where a decoder scores strictly higher than the
+  tuned original. The onset delay is the median time from a note's start until the decoder has committed to it.</p>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr><th>Decoder</th><th colspan="3">GuitarSet Fno / F · beats</th><th colspan="3">MAESTRO Fno / F · beats</th><th colspan="3">vocadito Fno / F · beats</th><th>Onset delay</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Original, default (melodia trick on)</td><td>.780</td><td>.563</td><td>14% / 10%</td><td>.691</td><td>.239</td><td>1% / 6%</td><td>.483</td><td>.317</td><td>5% / 15%</td><td>whole file</td></tr>
+        <tr class="bar"><td>Original, tuned per dataset (the bar)</td><td>.817</td><td>.636</td><td>–</td><td>.774</td><td>.279</td><td>–</td><td>.559</td><td>.390</td><td>–</td><td>whole file</td></tr>
+        <tr class="shipped"><td>Streaming HMM, starting parameters (Live mode)</td><td>.813</td><td>.600</td><td>40% / 23%</td><td>.748</td><td>.278</td><td>26% / 44%</td><td>.563</td><td>.408</td><td class="win">55% / 65%</td><td>0–58 ms</td></tr>
+        <tr><td>Streaming HMM, tuned per dataset</td><td>.822</td><td>.612</td><td>55% / 24%</td><td>.788</td><td>.297</td><td class="win">86% / 77%</td><td>.580</td><td>.421</td><td class="win">75% / 80%</td><td>93–116 ms</td></tr>
+        <tr><td>Learned decoder, 4 frames look-ahead</td><td>.815</td><td>.621</td><td>46% / 36%</td><td>.741</td><td>.271</td><td>9% / 40%</td><td>.475</td><td>.234</td><td>5% / 0%</td><td>58–128 ms</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">The learned decoder with no look-ahead or 8 frames did worse (vocadito Fno .479 and .444).</p>
+
+  <p>Then we redid the vocadito sweep with the share of tracks won as the objective, against a re-tuned original (test
+  Fno .563, F .387), and ran the ceiling check:</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Streaming HMM on vocadito test</th><th>Fno</th><th>F</th><th>Beats (Fno / F)</th><th>Onset delay</th></tr></thead>
+      <tbody>
+        <tr><td>Tuned on dev, ~0 ms budget</td><td>.555</td><td>.410</td><td>30% / 60%</td><td>12 ms</td></tr>
+        <tr><td>Tuned on dev, ~50 ms budget</td><td>.578</td><td>.429</td><td>60% / 85%</td><td>46 ms</td></tr>
+        <tr><td>Tuned on dev, ~100 ms budget</td><td>.580</td><td>.429</td><td>65% / 75%</td><td>70 ms</td></tr>
+        <tr><td>Tuned on the test tracks themselves (ceiling)</td><td>.584</td><td>.443</td><td>80% / 85%</td><td>104 ms</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>On the dev tracks, more delay stopped helping at about 150 ms: the best Fno was .566 under 46 ms, .588 at
+  46–93 ms, .600 at 140–230 ms and .605–.614 from 0.5 to 1.2 s.</p>
+
+  <h2>Why we went with what we did</h2>
+  <ul>
+    <li><b>The streaming HMM is the Live mode.</b> It makes notes while the audio comes in, typically within a few
+      frames of their start. It is far better than the original's defaults and close to the tuned original: ahead
+      on vocadito, behind on MAESTRO Fno (.748 vs .774) and GuitarSet F (.600 vs .636, mostly re-strikes of ringing
+      strings). Tuned per dataset, it pulls ahead on MAESTRO too.</li>
+    <li><b>It still uses its starting parameters.</b> The tuned sets are per dataset, add about 100 ms, and gain 0.01
+      to 0.04 Fno. There is no single tuned set yet that's better everywhere.</li>
+    <li><b>No learned decoder.</b> The spike lost to the tuned original on most tracks. Even the ceiling check, with the
+      HMM tuned on the very tracks it's scored on, beats the tuned original on only 80% (Fno) and 85% (F) of vocadito
+      tracks, short of the 95% we wanted. Different decoders reading the same model outputs end up at about the same
+      score, so the remaining errors look like they're in the model's outputs, not the decoding.</li>
+    <li><b>Original mode stays for comparison.</b> It is a line-by-line port of
+      <code>output_to_notes_polyphonic</code> with <code>predict()</code>'s defaults, melodia trick included, and
+      gives the same notes as the Python code on the test fixtures.</li>
+    <li><b>The site works like a map.</b> Whatever is on screen is transcribed first. Each run of windows starts one
+      window early so its notes match decoding from the start, the decoder keeps only 100 frames of history, and
+      finished results are cached in the browser. On a 10-minute file, jumping around gave exactly the same 1,759
+      notes as going front to back, at about 97× real time on 4 threads.</li>
+  </ul>
+
+  <h2>Not done</h2>
+  <ul>
+    <li>Ceiling checks on GuitarSet and MAESTRO (each trial takes 20–120 s on GuitarSet).</li>
+    <li>Microphone input, MIDI export, and testing in Safari.</li>
+  </ul>
+  <p class="note"><a href="./">Back to the demo</a> · <a href="https://basicpitch.spotify.com/">Spotify's original Basic Pitch demo</a> ·
+    <a href="https://github.com/drubinstein/basic-pitch/tree/main/web">Source</a></p>
+</main>
+</body>
+</html>

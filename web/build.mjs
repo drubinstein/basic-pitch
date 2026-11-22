@@ -13,6 +13,7 @@ await esbuild.build({ ...common, entryPoints: ['src/app.js'], format: 'esm', out
 await esbuild.build({ ...common, entryPoints: ['src/worker.js'], format: 'iife', outfile: `${out}/worker.js` });
 
 copy('index.html', 'index.html');
+copy('report.html', 'report.html');
 copy('model/nmp_web.tflite', 'model/nmp_web.tflite');
 copy('node_modules/coi-serviceworker/coi-serviceworker.min.js', 'coi-serviceworker.min.js');
 copy('../tests/resources/vocadito_10.wav', 'examples/vocadito_10.wav');

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import zlib from 'node:zlib';
 import { StreamingHmm } from '../src/hmm.js';
-import { WindowedDecoder, nextWindow } from '../src/segments.js';
+import { WindowedDecoder, nextWindow, nextMissing } from '../src/segments.js';
 import { FRAMES_PER_WINDOW as F } from '../src/pipeline.js';
 
 const fixture = (name) => new URL(`./fixtures/${name}`, import.meta.url);
@@ -88,4 +88,11 @@ test('the scheduler does the visible windows first, then the rest, with few wind
   assert.deepEqual(sorted(notes, key3), sorted(sequential, key3));
   assert.ok(computed.length <= n + 4, `${computed.length} model runs for ${n} windows`);
   assert.ok(held <= 8, `held ${held} windows`);
+});
+
+test('without a streaming decoder, windows on screen come first, then the rest from there on', () => {
+  const done = new Array(10).fill(false), order = [];
+  for (let w; (w = nextMissing(done, 6, 7)) >= 0; ) { order.push(w); done[w] = true; }
+  assert.deepEqual(order, [6, 7, 8, 9, 0, 1, 2, 3, 4, 5]);
+  assert.equal(nextMissing([], 0, 0), -1);
 });

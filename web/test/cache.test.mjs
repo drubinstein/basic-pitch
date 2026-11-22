@@ -4,10 +4,12 @@ import assert from 'node:assert/strict';
 import { fileKey, pack, unpack, RESULT_VERSION } from '../src/cache.js';
 import { toByte } from '../src/pipeline.js';
 
-test('file keys depend on the bytes and the result version', async () => {
-  const a = await fileKey(new Uint8Array([1, 2, 3]).buffer), b = await fileKey(new Uint8Array([1, 2, 4]).buffer);
-  assert.equal(a, await fileKey(new Uint8Array([1, 2, 3]).buffer));
+test('file keys depend on the bytes, the mode and the result version', async () => {
+  const bytes = (...x) => new Uint8Array(x).buffer;
+  const a = await fileKey(bytes(1, 2, 3), 'live'), b = await fileKey(bytes(1, 2, 4), 'live');
+  assert.equal(a, await fileKey(bytes(1, 2, 3), 'live'));
   assert.notEqual(a, b);
+  assert.notEqual(a, await fileKey(bytes(1, 2, 3), 'original'));
   assert.ok(a.startsWith(`v${RESULT_VERSION}:`));
 });
 
