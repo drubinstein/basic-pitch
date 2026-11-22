@@ -148,3 +148,6 @@ junit.xml
 
 # intellij
 .idea/
+
+# Browser demo (web/)
+web/node_modules/

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Basic Pitch Live</title>
+  <meta name="description" content="Audio-to-MIDI transcription with Basic Pitch, running in your browser with LiteRT.js.">
+  <!-- GitHub Pages can't send COOP/COEP headers; this service worker adds them so LiteRT.js can use threads. -->
+  <script src="coi-serviceworker.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f5; --surface: #ffffff; --text: #1d1d1f; --text-muted: #6b6b70; --border: #dcdcdf;
+      --accent: #2f6fde; --accent-strong: #1d4fae; --heat: #e0782f;
+      --roll-bg: #ffffff; --roll-black-key: #f1f1f3; --roll-grid: #e2e2e6; --roll-pending: rgba(127, 127, 135, 0.08);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #121214; --surface: #1b1b1e; --text: #ececef; --text-muted: #9a9aa2; --border: #303036;
+        --accent: #6f9cf0; --accent-strong: #a9c4f7; --heat: #f0a050;
+        --roll-bg: #161618; --roll-black-key: #1d1d21; --roll-grid: #2a2a30; --roll-pending: rgba(160, 160, 170, 0.07);
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body { background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; display: flex; flex-direction: column; }
+    header { padding: 14px 16px 10px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+    h1 { font-size: 17px; margin: 0 8px 0 0; font-weight: 650; }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    button, .file { font: inherit; font-size: 14px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+    button:hover, .file:hover { border-color: var(--accent); }
+    .file input { display: none; }
+    #status { font-weight: 550; }
+    .meta { padding: 0 16px 8px; display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--text-muted); font-size: 13px; }
+    main { flex: 1; min-height: 320px; padding: 0 16px 12px; display: flex; }
+    #roll { flex: 1; width: 100%; height: 100%; border: 1px solid var(--border); border-radius: 10px; touch-action: none; cursor: grab; outline: none; }
+    #roll:active { cursor: grabbing; }
+    #roll:focus-visible { border-color: var(--accent); }
+    footer { padding: 0 16px 14px; color: var(--text-muted); font-size: 12px; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Basic Pitch Live</h1>
+    <div class="controls">
+      <label class="file">Open audio…<input id="file" type="file" accept="audio/*"></label>
+      <button id="example" type="button">Try an example</button>
+      <button id="fit" type="button">Fit</button>
+    </div>
+  </header>
+  <div class="meta">
+    <span id="status">Open an audio file or drop one here. It stays on your machine.</span>
+    <span id="stats"></span>
+  </div>
+  <main><canvas id="roll" tabindex="0" aria-label="Piano roll of transcribed notes"></canvas></main>
+  <footer>
+    Drag or scroll sideways to pan · pinch, ctrl+scroll or scroll to zoom · double-click to zoom in · 0 to fit.
+    Model: <a href="https://github.com/spotify/basic-pitch">Basic Pitch</a> (Spotify) on LiteRT.js, decoded with a streaming HMM.
+    Example: vocadito track 10. <a href="https://github.com/drubinstein/basic-pitch/tree/main/web">Source</a>
+  </footer>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

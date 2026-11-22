@@ -13,6 +13,8 @@ Basic Pitch may be simple, but it's is far from "basic"! `basic-pitch` is effici
 
 Provide a compatible audio file and basic-pitch will generate a MIDI file, complete with pitch bends. Basic pitch is instrument-agnostic and supports polyphonic instruments, so you can freely enjoy transcription of all your favorite music, no matter what instrument is used.  Basic pitch works best on one instrument at a time.
 
+Try it in your browser at [drubinstein.github.io/basic-pitch](https://drubinstein.github.io/basic-pitch/): the model runs locally with LiteRT.js and notes stream in as each window is processed. See [`web/`](web/README.md).
+
 ### Research Paper
 This library was released in conjunction with Spotify's publication at [ICASSP 2022](https://2022.ieeeicassp.org/). You can read more about this research in the paper, [A Lightweight Instrument-Agnostic Model for Polyphonic Note Transcription and Multipitch Estimation](https://arxiv.org/abs/2203.09893).
 
