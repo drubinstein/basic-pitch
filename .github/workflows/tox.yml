@@ -16,7 +16,7 @@ jobs:
         py:
           - "3.11"
         include:
-          - os: macos-latest-xlarge
+          - os: macos-latest
             py: "3.11.8"
     steps:
       - name: Setup python for test ${{ matrix.py }}
@@ -29,7 +29,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
       - name: Install soundlibs MacOs
         run: brew install libsndfile llvm libomp sox ffmpeg
-        if: matrix.os == 'macos-latest-xlarge'
+        if: matrix.os == 'macos-latest'
       - name: Install soundlibs Windows
         run: choco install libsndfile sox.portable flac ffmpeg
         if: matrix.os == 'windows-latest'

@@ -49,7 +49,7 @@ To update Basic Pitch to the latest version, add `--upgrade` to the above comman
 
 ### Model Runtime
 
-Basic Pitch comes with the original TensorFlow model and the TensorFlow model converted to [CoreML](https://developer.apple.com/documentation/coreml), [TensorFlowLite](https://www.tensorflow.org/lite), and [ONNX](https://onnx.ai/). By default, Basic Pitch installs TensorFlow on Linux and Windows and CoreML on MacOS. On Linux, it also installs [LiteRT](https://developers.google.com/edge/litert) (formerly TensorFlow Lite). To run the TFLite model with LiteRT on MacOS or Windows, install it via `pip install basic-pitch[litert]`. To use the ONNX model, install `pip install basic-pitch[onnx]`. If you want to install TensorFlow along with the default model inference runtime, you can install TensorFlow via `pip install basic-pitch[tf]`.
+Basic Pitch comes with the original TensorFlow model and the TensorFlow model converted to [CoreML](https://developer.apple.com/documentation/coreml), [TensorFlowLite](https://www.tensorflow.org/lite), and [ONNX](https://onnx.ai/). By default, Basic Pitch installs [LiteRT](https://developers.google.com/edge/litert) (formerly TensorFlow Lite) on Linux and Windows and CoreML on MacOS, and does not install TensorFlow. To run the TFLite model with LiteRT on MacOS, install it via `pip install basic-pitch[litert]`. To use the ONNX model, install `pip install basic-pitch[onnx]`. If you want to install TensorFlow along with the default model inference runtime, you can install TensorFlow via `pip install basic-pitch[tf]`; training and the data pipeline need it too (`pip install basic-pitch[data]`).
 
 ## Usage
 
@@ -66,7 +66,7 @@ By default, Basic Pitch will attempt to load a model in the following order:
 
 Additionally, the module variable ICASSP_2022_MODEL_PATH will default to the first available version in the list.
 
-We will explain how to override this priority list below. Because all other model serializations were converted from TensorFlow, we recommend using TensorFlow when possible. N.B. Basic Pitch does not install TensorFlow by default to save the user time when installing and running Basic Pitch.
+We will explain how to override this priority list below. Because all other model serializations were converted from TensorFlow, we recommend using TensorFlow when possible. N.B. Basic Pitch does not install TensorFlow by default to save the user time when installing and running Basic Pitch, so a default install runs the TFLite model on Linux and Windows and the CoreML model on MacOS.
 
 #### Command Line Tool
 
