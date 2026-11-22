@@ -38,6 +38,8 @@
     #roll:focus-visible { border-color: var(--accent); }
     footer { padding: 0 16px 14px; color: var(--text-muted); font-size: 12px; }
     a { color: var(--accent); }
+    .link { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
@@ -47,6 +49,7 @@
       <label class="file">Open audio…<input id="file" type="file" accept="audio/*"></label>
       <button id="example" type="button">Try an example</button>
       <button id="fit" type="button">Fit</button>
+      <button id="again" type="button" hidden>Run again</button>
     </div>
   </header>
   <div class="meta">
@@ -56,8 +59,10 @@
   <main><canvas id="roll" tabindex="0" aria-label="Piano roll of transcribed notes"></canvas></main>
   <footer>
     Drag or scroll sideways to pan · pinch, ctrl+scroll or scroll to zoom · double-click to zoom in · 0 to fit.
+    Whatever is on screen is transcribed first.
     Model: <a href="https://github.com/spotify/basic-pitch">Basic Pitch</a> (Spotify) on LiteRT.js, decoded with a streaming HMM.
-    Example: vocadito track 10. <a href="https://github.com/drubinstein/basic-pitch/tree/main/web">Source</a>
+    Example: vocadito track 10. Results are saved in this browser (<button id="forget" class="link" type="button">clear</button>).
+    <a href="https://github.com/drubinstein/basic-pitch/tree/main/web">Source</a>
   </footer>
   <script type="module" src="app.js"></script>
 </body>

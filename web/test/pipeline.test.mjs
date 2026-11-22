@@ -38,3 +38,13 @@ test('frameToTime matches note_creation.model_frames_to_time', () => {
   const ref = { 0: 0.0, 1: 0.011609977, 171: 1.985306122, 172: 1.986590023, 173: 1.9982, 500: 5.784336508, 799: 9.235067574 };
   for (const [i, t] of Object.entries(ref)) assert.ok(Math.abs(frameToTime(Number(i)) - t) < 1e-9, `frame ${i}`);
 });
+
+test('timeToFrame inverts frameToTime', async () => {
+  const { timeToFrame } = await import('../src/pipeline.js');
+  assert.equal(timeToFrame(0), 0);
+  assert.equal(timeToFrame(-5), 0);
+  for (const i of [1, 171, 172, 173, 500, 799, 12345, 310000]) {
+    assert.equal(timeToFrame(frameToTime(i)), i);
+    assert.equal(timeToFrame((frameToTime(i) + frameToTime(i + 1)) / 2), i);
+  }
+});

@@ -15,7 +15,7 @@ const note = load('vocadito_10_note.f32.gz'), onset = load('vocadito_10_onset.f3
 const key = (n) => n.join(',');
 
 function decode(onNotes) {
-  const hmm = new StreamingHmm(ref.prm, { beam: ref.beam, maxLag: ref.max_lag, capacity: ref.T });
+  const hmm = new StreamingHmm(ref.prm, { beam: ref.beam, maxLag: ref.max_lag });
   for (let t = 0; t < ref.T; t++) {
     hmm.push(note.subarray(t * 88, t * 88 + 88), onset.subarray(t * 88, t * 88 + 88));
     if (t % 142 === 141) onNotes(hmm.drain());
@@ -38,4 +38,16 @@ test('notes drained while streaming plus finish() are the same notes, each once'
   const rest = hmm.drain();
   assert.deepEqual([...streamed, ...rest].map(key).sort(), all);
   assert.equal(new Set(all).size, all.length);
+});
+
+test('decodes inputs of any length (no per-frame history kept)', () => {
+  const hmm = new StreamingHmm(ref.prm, { beam: ref.beam, maxLag: ref.max_lag });
+  const frames = (1 << 16) + 1000; // more than the old default capacity
+  for (let i = 0; i < frames; i++) {
+    const t = i % ref.T;
+    hmm.push(note.subarray(t * 88, t * 88 + 88), onset.subarray(t * 88, t * 88 + 88));
+  }
+  const notes = hmm.finish();
+  assert.ok(notes.length > (ref.notes.length * frames) / ref.T / 2);
+  assert.ok(notes.every(([s, e]) => s >= 0 && e > s && e <= frames));
 });

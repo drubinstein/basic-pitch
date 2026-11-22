@@ -9,7 +9,8 @@
 //
 // Notes are [start frame, end frame (exclusive), MIDI pitch, frame when the start was final, frame
 // when the end was final]. This is a port of the Python spike decoder; test/hmm.test.mjs checks that
-// both give the same notes.
+// both give the same notes. Decisions are final at most `maxLag` frames back, so only that much
+// history is kept (a ring buffer) and memory doesn't grow with the input.
 import { N_PITCHES, MIDI_OFFSET } from './pipeline.js';
 
 const NEG = -1e18;
@@ -21,9 +22,10 @@ const logit = (p) => {
 export const DEFAULT_PARAMS = { theta_f: 0.4, theta_o: 0.5, w: 1.0, alpha: 4.0, b_on: -4.0, b_mel: -10.0, gamma: 10.0, b_re: 0.0, m: 4, g: 5 };
 
 export class StreamingHmm {
-  constructor(prm = DEFAULT_PARAMS, { beam = 2, maxLag = 100, capacity = 1 << 16 } = {}) {
+  constructor(prm = DEFAULT_PARAMS, { beam = 2, maxLag = 100 } = {}) {
     const P = N_PITCHES, m = prm.m, g = prm.g;
-    Object.assign(this, { prm, beam, maxLag, P, cap: capacity });
+    // Frames older than t - maxLag are always final, so maxLag + 2 slots of history are enough.
+    Object.assign(this, { prm, beam, maxLag, P, R: maxLag + 2 });
     this.S = m + 1;
     this.G0 = m + 2;
     this.GL = m + 1 + g;
@@ -31,9 +33,9 @@ export class StreamingHmm {
     this.delta = new Float64Array(P * this.n).fill(NEG);
     for (let p = 0; p < P; p++) this.delta[p * this.n] = 0;
     this.next = new Float64Array(P * this.n);
-    this.bps = new Int8Array(capacity * P * this.n); // back-pointers for every frame
-    this.dec = new Int8Array(capacity * P).fill(-1); // final state per frame and pitch
-    this.when = new Int32Array(capacity * P).fill(-1); // frame at which that state became final
+    this.bps = new Int8Array(this.R * P * this.n); // back-pointers, per recent frame
+    this.dec = new Int8Array(this.R * P).fill(-1); // final state per recent frame and pitch
+    this.when = new Int32Array(this.R * P).fill(-1); // frame at which that state became final
     this.committed = new Int32Array(P).fill(-1);
     this.cur = new Int32Array(this.n);
     this.lf = logit(prm.theta_f);
@@ -42,6 +44,7 @@ export class StreamingHmm {
     // Note extraction state, per pitch: last frame scanned, open note start, gap start.
     this.scanned = new Int32Array(P).fill(-1);
     this.open = new Int32Array(P).fill(-1);
+    this.openWhen = new Int32Array(P).fill(-1); // when the open note's start became final
     this.gap = new Int32Array(P).fill(-1);
     this.notes = [];
     this.drained = 0;
@@ -49,8 +52,7 @@ export class StreamingHmm {
 
   push(noteRow, onsetRow) {
     const { P, n, S, G0, GL, prm } = this, m = prm.m, t = this.t;
-    if (t >= this.cap) throw new Error(`StreamingHmm capacity ${this.cap} frames exceeded`);
-    const d0 = this.delta, nx = this.next, bp = this.bps, base = t * P * n;
+    const d0 = this.delta, nx = this.next, bp = this.bps, base = (t % this.R) * P * n;
     for (let p = 0; p < P; p++) {
       const o = p * n, b = base + o;
       const x = prm.w * (logit(noteRow[p]) - this.lf);
@@ -84,7 +86,7 @@ export class StreamingHmm {
 
   // Survivor-merge commit for each pitch.
   #commit(t) {
-    const { P, n } = this, d = this.delta, cur = this.cur, bp = this.bps;
+    const { P, n, R } = this, d = this.delta, cur = this.cur, bp = this.bps;
     for (let p = 0; p < P; p++) {
       if (this.committed[p] >= t) continue;
       const o = p * n;
@@ -110,16 +112,16 @@ export class StreamingHmm {
           }
           let s = sStar;
           for (let tt = tau; tt > this.committed[p]; tt--) {
-            this.dec[tt * P + p] = s;
-            this.when[tt * P + p] = t;
-            s = bp[(tt * P + p) * n + s];
+            this.dec[(tt % R) * P + p] = s;
+            this.when[(tt % R) * P + p] = t;
+            s = bp[((tt % R) * P + p) * n + s];
           }
           this.committed[p] = tau;
           for (let s2 = 0; s2 < n; s2++) if (cur[s2] !== sStar) d[o + s2] = NEG;
           break;
         }
         if (!(this.committed[p] < tau - 1) || tau === 0) break;
-        for (let s = 0; s < n; s++) cur[s] = bp[(tau * P + p) * n + cur[s]];
+        for (let s = 0; s < n; s++) cur[s] = bp[((tau % R) * P + p) * n + cur[s]];
         tau--;
       }
     }
@@ -127,17 +129,17 @@ export class StreamingHmm {
 
   // Turn pitch p's final states up to frame `upTo` into notes.
   #scan(p, upTo) {
-    const { P, m, S, G0, GL } = { P: this.P, m: this.prm.m, S: this.S, G0: this.G0, GL: this.GL };
-    const T = this.t;
+    const { P, R, S, G0, GL } = this, m = this.prm.m;
     const close = (t) => {
       const start = this.open[p], gap = this.gap[p];
-      this.notes.push([start, gap >= 0 ? gap : t, p + MIDI_OFFSET, this.when[start * P + p], this.when[Math.min(t, T - 1) * P + p]]);
+      this.notes.push([start, gap >= 0 ? gap : t, p + MIDI_OFFSET, this.openWhen[p], this.when[(t % R) * P + p]]);
     };
     for (let t = this.scanned[p] + 1; t <= upTo; t++) {
-      const s = this.dec[t * P + p];
+      const s = this.dec[(t % R) * P + p];
       if (s === 1) {
         if (this.open[p] >= 0) close(t);
         this.open[p] = t;
+        this.openWhen[p] = this.when[(t % R) * P + p];
         this.gap[p] = -1;
       } else if ((s >= 1 && s <= m) || s === S) {
         this.gap[p] = -1;
@@ -152,6 +154,15 @@ export class StreamingHmm {
     this.scanned[p] = Math.max(this.scanned[p], upTo);
   }
 
+  // True once every note that starts before `frame` is final (and has been drained or will be).
+  settled(frame) {
+    for (let p = 0; p < this.P; p++) {
+      if (this.committed[p] < frame - 1) return false;
+      if (this.open[p] >= 0 && this.open[p] < frame) return false;
+    }
+    return true;
+  }
+
   // Notes that became final since the last call.
   drain() {
     const out = this.notes.slice(this.drained);
@@ -161,22 +172,20 @@ export class StreamingHmm {
 
   // End of input: trace back whatever is not final yet and close open notes. Returns every note.
   finish() {
-    const { P, n } = this, T = this.t, d = this.delta;
+    const { P, n, R } = this, T = this.t, d = this.delta;
     for (let p = 0; p < P; p++) {
       let s = 0;
       for (let j = 1; j < n; j++) if (d[p * n + j] > d[p * n + s]) s = j;
-      for (let tt = T - 1; tt >= 0; tt--) {
-        if (this.committed[p] < tt) {
-          this.dec[tt * P + p] = s;
-          this.when[tt * P + p] = T - 1;
-        }
-        s = this.bps[(tt * P + p) * n + s];
+      for (let tt = T - 1; tt > this.committed[p]; tt--) {
+        this.dec[(tt % R) * P + p] = s;
+        this.when[(tt % R) * P + p] = T - 1;
+        s = this.bps[((tt % R) * P + p) * n + s];
       }
       this.committed[p] = T - 1;
       this.#scan(p, T - 1);
       if (this.open[p] >= 0) {
         const start = this.open[p], gap = this.gap[p];
-        this.notes.push([start, gap >= 0 ? gap : T, p + MIDI_OFFSET, this.when[start * P + p], this.when[(T - 1) * P + p]]);
+        this.notes.push([start, gap >= 0 ? gap : T, p + MIDI_OFFSET, this.openWhen[p], this.when[((T - 1) % R) * P + p]]);
         this.open[p] = -1;
       }
     }

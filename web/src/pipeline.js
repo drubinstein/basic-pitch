@@ -39,3 +39,15 @@ export function windowFrames(output, nBins) {
 // note_creation.model_frames_to_time for one frame index.
 const WINDOW_OFFSET = (FFT_HOP / SAMPLE_RATE) * (ANNOT_N_FRAMES - AUDIO_N_SAMPLES / FFT_HOP) + 0.0018;
 export const frameToTime = (i) => (i * FFT_HOP) / SAMPLE_RATE - WINDOW_OFFSET * Math.floor(i / ANNOT_N_FRAMES);
+
+// The frame shown at time t (the inverse of frameToTime, which is increasing).
+export function timeToFrame(t) {
+  if (!(t > 0)) return 0;
+  let i = Math.floor(t / (FFT_HOP / SAMPLE_RATE - WINDOW_OFFSET / ANNOT_N_FRAMES));
+  while (frameToTime(i + 1) <= t) i++;
+  while (i > 0 && frameToTime(i) > t) i--;
+  return i;
+}
+
+// Activations travel and are cached as bytes.
+export const toByte = (v) => Math.round(255 * Math.min(1, Math.max(0, v)));

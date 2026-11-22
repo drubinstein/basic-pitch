@@ -1,54 +1,104 @@
 // Piano roll on a canvas that pans and zooms like a map: drag or scroll sideways to pan, pinch,
 // ctrl+scroll or scroll up/down to zoom around the pointer, double-click to zoom in, 0 to fit.
-// Each processed model window is kept as its own small image tile of note activations, so drawing
-// scales to long files and new windows appear as they arrive.
-import { N_PITCHES, MIDI_OFFSET } from './pipeline.js';
+// Like map tiles, each model window's note activations are kept as bytes and drawn into a small
+// canvas only when visible (an LRU keeps the recent ones); zoomed far out, groups of windows are
+// drawn from coarser tiles instead. Windows arrive in any order; `onView` reports what's visible
+// so those can be transcribed first.
+import { FRAMES_PER_WINDOW, N_PITCHES, MIDI_OFFSET } from './pipeline.js';
 
 const LO = MIDI_OFFSET, HI = MIDI_OFFSET + N_PITCHES - 1;
 const MAX_PPS = 4000; // pixels per second at full zoom
 const GUTTER = 36; // left gutter for octave labels
 const AXIS = 22; // bottom axis height
 const STEPS = [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
+const LRU = 384; // window canvases kept
+const GROUP = 8; // windows per coarse tile
 
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 export class PianoRoll {
-  constructor(canvas, frameToTime) {
-    Object.assign(this, { canvas, frameToTime, ctx: canvas.getContext('2d') });
-    this.reset(0);
+  constructor(canvas, frameToTime, onView = () => {}) {
+    Object.assign(this, { canvas, frameToTime, onView, ctx: canvas.getContext('2d') });
+    this.reset(0, 0);
     new ResizeObserver(() => this.#resize()).observe(canvas);
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.#readColors());
     this.#readColors();
     this.#bind();
   }
 
-  reset(duration) {
+  reset(duration, totalFrames) {
     this.duration = duration;
-    this.processed = 0;
+    this.totalFrames = totalFrames;
+    this.nWindows = Math.ceil(totalFrames / FRAMES_PER_WINDOW);
+    this.tiles = new Array(this.nWindows).fill(null); // byte activations per window
+    this.canvases = new Map(); // window -> canvas, in LRU order
+    this.coarse = new Map(); // group -> canvas
     this.notes = [];
-    this.tiles = [];
     this.t0 = 0;
     this.pps = null; // fit on next draw
+    this.lastView = '';
     this.request();
   }
 
-  addTile(startFrame, frames, activation) {
+  // activation: frames x 88 bytes (0-255) for window w.
+  addTile(w, activation) {
+    this.tiles[w] = activation;
+    this.coarse.delete(Math.floor(w / GROUP));
+    this.request();
+  }
+
+  // Byte activations for the whole file (missing windows are zeros).
+  activation() {
+    const out = new Uint8Array(this.totalFrames * N_PITCHES);
+    this.tiles.forEach((a, w) => a && out.set(a, w * FRAMES_PER_WINDOW * N_PITCHES));
+    return out;
+  }
+
+  #frames(w) { return Math.min(FRAMES_PER_WINDOW, this.totalFrames - w * FRAMES_PER_WINDOW); }
+  #span(w0, w1) { return [this.frameToTime(w0 * FRAMES_PER_WINDOW), this.frameToTime(Math.min(this.totalFrames, w1 * FRAMES_PER_WINDOW))]; }
+
+  // Paint byte activations (cols x 88, each column the max over `step` frames) into a canvas.
+  #paint(cols, value) {
     const tile = document.createElement('canvas');
-    tile.width = frames;
+    tile.width = Math.max(1, cols);
     tile.height = N_PITCHES;
-    const g = tile.getContext('2d'), img = g.createImageData(frames, N_PITCHES);
-    const [r, gg, b] = this.colors.heat;
-    for (let f = 0; f < frames; f++) {
+    const g = tile.getContext('2d'), img = g.createImageData(tile.width, N_PITCHES), [r, gg, b] = this.colors.heat;
+    for (let f = 0; f < cols; f++) {
       for (let p = 0; p < N_PITCHES; p++) {
-        const v = activation[f * N_PITCHES + p], o = ((N_PITCHES - 1 - p) * frames + f) * 4;
+        const v = value(f, p) / 255, o = ((N_PITCHES - 1 - p) * tile.width + f) * 4;
         img.data[o] = r; img.data[o + 1] = gg; img.data[o + 2] = b;
         img.data[o + 3] = Math.round(255 * 0.7 * Math.min(1, Math.max(0, (v - 0.08) / 0.92)) ** 1.2);
       }
     }
     g.putImageData(img, 0, 0);
-    this.tiles.push({ t0: this.frameToTime(startFrame), t1: this.frameToTime(startFrame + frames), canvas: tile });
-    this.processed = Math.max(this.processed, this.frameToTime(startFrame + frames));
-    this.request();
+    return tile;
+  }
+
+  #windowCanvas(w) {
+    let c = this.canvases.get(w);
+    if (c) { this.canvases.delete(w); this.canvases.set(w, c); return c; }
+    const a = this.tiles[w];
+    c = this.#paint(this.#frames(w), (f, p) => a[f * N_PITCHES + p]);
+    this.canvases.set(w, c);
+    if (this.canvases.size > LRU) this.canvases.delete(this.canvases.keys().next().value);
+    return c;
+  }
+
+  #groupCanvas(gi) {
+    let c = this.coarse.get(gi);
+    if (c) return c;
+    const w0 = gi * GROUP, w1 = Math.min(this.nWindows, w0 + GROUP), f0 = w0 * FRAMES_PER_WINDOW;
+    const frames = Math.min(this.totalFrames, w1 * FRAMES_PER_WINDOW) - f0, cols = Math.ceil(frames / GROUP);
+    c = this.#paint(cols, (col, p) => {
+      let v = 0;
+      for (let f = col * GROUP; f < Math.min(frames, (col + 1) * GROUP); f++) {
+        const a = this.tiles[w0 + Math.floor(f / FRAMES_PER_WINDOW)];
+        if (a) v = Math.max(v, a[(f % FRAMES_PER_WINDOW) * N_PITCHES + p]);
+      }
+      return v;
+    });
+    this.coarse.set(gi, c);
+    return c;
   }
 
   addNotes(notes) {
@@ -73,6 +123,8 @@ export class PianoRoll {
   #readColors() {
     const hex = (v) => { const n = parseInt(v.replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
     this.colors = { bg: css('--roll-bg'), black: css('--roll-black-key'), grid: css('--roll-grid'), text: css('--text-muted'), note: css('--accent'), noteEdge: css('--accent-strong'), pending: css('--roll-pending'), heat: hex(css('--heat')) };
+    this.canvases.clear(); // tiles are painted in the heat colour
+    this.coarse.clear();
     this.request();
   }
 
@@ -188,11 +240,31 @@ export class PianoRoll {
     ctx.rect(GUTTER, 0, W - GUTTER, plotH);
     ctx.clip();
 
-    // Activation tiles, then notes, then the not-yet-processed region.
+    // Activation tiles (coarse ones when a frame would be under half a pixel), notes, then shading
+    // over windows that aren't transcribed yet.
     ctx.imageSmoothingEnabled = false;
-    for (const tile of this.tiles) {
-      if (tile.t1 < this.t0 || tile.t0 > t1) continue;
-      ctx.drawImage(tile.canvas, x(tile.t0), 0, (tile.t1 - tile.t0) * this.pps, plotH);
+    const visible = [];
+    for (let w = 0; w < this.nWindows; w++) {
+      const [a, b] = this.#span(w, w + 1);
+      if (b >= this.t0 && a <= t1) visible.push(w);
+    }
+    if (visible.length) {
+      const fine = (this.pps * this.duration) / Math.max(1, this.totalFrames) >= 0.5;
+      if (fine) {
+        for (const w of visible) {
+          if (!this.tiles[w]) continue;
+          const [a, b] = this.#span(w, w + 1);
+          ctx.drawImage(this.#windowCanvas(w), x(a), 0, (b - a) * this.pps, plotH);
+        }
+      } else {
+        const g0 = Math.floor(visible[0] / GROUP), g1 = Math.floor(visible[visible.length - 1] / GROUP);
+        for (let gi = g0; gi <= g1; gi++) {
+          const [a, b] = this.#span(gi * GROUP, Math.min(this.nWindows, (gi + 1) * GROUP));
+          ctx.drawImage(this.#groupCanvas(gi), x(a), 0, (b - a) * this.pps, plotH);
+        }
+      }
+      const view = `${visible[0]},${visible[visible.length - 1]}`;
+      if (view !== this.lastView) { this.lastView = view; this.onView(visible[0], visible[visible.length - 1]); }
     }
     ctx.fillStyle = k.note;
     ctx.strokeStyle = k.noteEdge;
@@ -203,9 +275,11 @@ export class PianoRoll {
       ctx.fillRect(nx, ny, nw, nh);
       if (nh > 4 && nw > 4) ctx.strokeRect(nx + 0.5, ny + 0.5, nw - 1, nh - 1);
     }
-    if (this.processed < this.duration) {
-      ctx.fillStyle = k.pending;
-      ctx.fillRect(x(this.processed), 0, W, plotH);
+    ctx.fillStyle = k.pending;
+    for (const w of visible) {
+      if (this.tiles[w]) continue;
+      const [a, b] = this.#span(w, w + 1);
+      ctx.fillRect(x(a), 0, (b - a) * this.pps + 1, plotH);
     }
     ctx.restore();
   }
