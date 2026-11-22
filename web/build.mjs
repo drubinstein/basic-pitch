@@ -9,7 +9,8 @@ const copy = (from, to) => { fs.mkdirSync(path.dirname(path.join(out, to)), { re
 
 fs.rmSync(out, { recursive: true, force: true });
 const common = { bundle: true, minify: true, sourcemap: true, target: 'es2022', logLevel: 'warning' };
-await esbuild.build({ ...common, entryPoints: ['src/app.js'], format: 'esm', outfile: `${out}/app.js` });
+// The report tab's code is split into its own chunk, loaded when the tab is opened.
+await esbuild.build({ ...common, entryPoints: ['src/app.js'], format: 'esm', splitting: true, outdir: out, chunkNames: 'chunks/[name]-[hash]' });
 await esbuild.build({ ...common, entryPoints: ['src/worker.js'], format: 'iife', outfile: `${out}/worker.js` });
 
 copy('index.html', 'index.html');

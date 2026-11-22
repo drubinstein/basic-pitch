@@ -8,7 +8,6 @@ import { Clock, formatTime, ANCHOR } from './playback.js';
 import { startMic, toWav } from './mic.js';
 import { noteName, noteHz, meanActivation } from './notes.js';
 import { toMidi, velocity } from './midi.js';
-import { renderReport } from './report.js';
 import { NotePlayer, mix, PRESETS, preset } from './synth.js';
 import { LIVE, ORIGINAL, defaults, isDefault } from './params.js';
 import { createKnob, createSwitch } from './knob.js';
@@ -49,7 +48,8 @@ function route() {
     if (a.dataset.tab === name) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   }
-  if (name === 'report') renderReport();
+  // The report's charts and data load only when the tab is first opened.
+  if (name === 'report') import('./report.js').then((r) => r.renderReport());
   if (target) target.scrollIntoView();
   else $(`panel-${name}`).scrollTop = 0;
 }
@@ -93,7 +93,7 @@ function decodeAgain() {
   clearTimeout(decodeTimer);
   decodeTimer = setTimeout(() => {
     if (!current) return;
-    if (!worker) return open(current.name, current.blob, { useCache: isDefaultFor(mode) });
+    if (!worker) return open(current.name, current.blob, { useCache: isDefaultFor(mode), keepView: true });
     decodeId++;
     setStatus(`Decoding ${current.name}…`);
     worker.postMessage({ type: 'redecode', id: decodeId, mode, params: { ...settings[mode] } });
@@ -147,9 +147,9 @@ for (const box of document.querySelectorAll('[data-layer]')) {
   });
 }
 $('layers').addEventListener('click', () => {
-  const open = $('layers-pop').hidden;
-  $('layers-pop').hidden = !open;
-  $('layers').setAttribute('aria-expanded', String(open));
+  const show = $('layers-pop').hidden;
+  $('layers-pop').hidden = !show;
+  $('layers').setAttribute('aria-expanded', String(show));
 });
 addEventListener('pointerdown', (e) => {
   if (!$('layers-pop').hidden && !e.target.closest('.layers')) { $('layers-pop').hidden = true; $('layers').setAttribute('aria-expanded', 'false'); }
@@ -170,9 +170,11 @@ async function decode(bytes) {
 }
 
 // A fresh roll for this file, keeping the playhead where the music is.
-function resetRoll(duration, totalFrames) {
+function resetRoll(duration, totalFrames, keepView = false) {
+  const kept = keepView && roll.pps !== null ? { t0: roll.t0, pps: roll.pps } : null;
   roll.reset(duration, totalFrames);
-  synthNotes();
+  if (kept) Object.assign(roll, kept);
+  synthNotes({ replace: true });
   $('total').textContent = formatTime(duration);
   showTime(clock.time());
   if (audio.src) {
@@ -181,13 +183,13 @@ function resetRoll(duration, totalFrames) {
   }
 }
 
-function showCached(name, hit) {
-  resetRoll(hit.duration, hit.totalFrames);
+function showCached(name, hit, keepView = false) {
+  resetRoll(hit.duration, hit.totalFrames, keepView);
   const step = FRAMES_PER_WINDOW * N_PITCHES;
   for (let w = 0; w * FRAMES_PER_WINDOW < hit.totalFrames; w++) roll.addTile(w, hit.activation.subarray(w * step, (w + 1) * step));
   roll.addNotes(hit.notes);
   results = hit.notes;
-  synthNotes();
+  synthNotes({ replace: true });
   window.basicPitch = { name, mode, duration: hit.duration, notes: hit.notes, done: true, fromCache: true };
   finished = { name, mode, notes: hit.notes };
   setStatus(`${name}: ${hit.notes.length} notes`);
@@ -205,7 +207,7 @@ function applyDecoded(m, { name, duration, totalFrames }) {
   for (const n of notes) n[5] ??= velocity(meanActivation(roll.tiles, FRAMES_PER_WINDOW, n[0], n[1], n[2]));
   roll.setNotes(notes);
   results = notes;
-  synthNotes();
+  synthNotes({ replace: true });
   Object.assign(window.basicPitch, { mode: m.mode, notes, decodeMs: m.decodeMs, redecoded: true });
   finished = { name, mode: m.mode, notes };
   setStatus(`${name}: ${notes.length} notes`);
@@ -213,49 +215,62 @@ function applyDecoded(m, { name, duration, totalFrames }) {
   if (isDefaultFor(m.mode)) cache.save({ key: cache.resultKey(current?.hash, m.mode), name, duration, totalFrames, notes, activation: roll.activation() });
 }
 
-// blob: the file (a File, or the example fetched as a Blob).
-async function open(name, blob, { useCache = isDefaultFor(mode) } = {}) {
+// blob: the file (a File, or the example fetched as a Blob). keepView: the same file again (from the
+// control panel), so keep the zoom and the focus where they are.
+async function open(name, blob, { useCache = isDefaultFor(mode), keepView = false } = {}) {
   const id = ++opened, stale = () => id !== opened;
   cancelRecording();
   showTranscribe();
+  setStatus(`Decoding ${name}…`);
+  // Read and decode before touching what's open, so a file that won't decode leaves it as it was.
+  const bytes = await blob.arrayBuffer();
+  const hash = await cache.fileHash(bytes).catch(() => null), key = cache.resultKey(hash, mode);
+  if (stale()) return;
+  const hit = useCache ? await cache.load(key) : null;
+  if (stale()) return;
+  let samples = null;
+  if (!hit) {
+    try {
+      samples = await decode(bytes);
+    } catch (err) {
+      if (!stale()) setStatus(`Couldn't decode ${name}: ${err.message}`);
+      return;
+    }
+    if (stale()) return;
+  }
   decodeId = 0;
   worker?.terminate();
   worker = null;
+  roll.anchor = ANCHOR;
   if (current?.blob !== blob) loadAudio(blob);
-  current = { name, blob };
+  current = { name, blob, hash };
   finished = null;
   $('again').hidden = true;
   $('download').hidden = true;
   results = [];
-  setStatus(`Decoding ${name}…`);
   setStats('');
-  const bytes = await blob.arrayBuffer();
-  const hash = await cache.fileHash(bytes).catch(() => null), key = cache.resultKey(hash, mode);
-  if (stale()) return;
-  current.hash = hash;
-  if (useCache) {
-    const hit = await cache.load(key);
-    if (stale()) return;
-    if (hit) return showCached(name, hit);
-  }
-  let samples;
-  try {
-    samples = await decode(bytes);
-  } catch (err) {
-    if (!stale()) setStatus(`Couldn't decode ${name}: ${err.message}`);
-    return;
-  }
-  if (stale()) return;
+  if (hit) return showCached(name, hit, keepView);
   const duration = samples.length / SAMPLE_RATE, totalFrames = nOutputFrames(samples.length), runMode = mode;
-  resetRoll(duration, totalFrames);
-  $('roll').focus();
+  resetRoll(duration, totalFrames, keepView);
+  if (!keepView) $('roll').focus();
   let runtime = '';
   const result = { name, mode: runMode, duration, notes: [], order: [] };
   results = result.notes;
   const runSettings = allSettings(), cacheable = isDefaultFor(runMode);
   window.basicPitch = result; // for scripted checks
-  worker = new Worker('worker.js');
-  worker.onmessage = ({ data: m }) => {
+  const w = (worker = new Worker('worker.js'));
+  const fail = (message) => {
+    if (worker !== w) return;
+    setStatus(`Something went wrong: ${message.split('\n')[0]}`);
+    result.error = message;
+    console.error(message);
+    w.terminate();
+    worker = null; // so the control panel and Run again start over
+    $('again').hidden = false;
+  };
+  w.onerror = (e) => { e.preventDefault(); fail(e.message || "The transcription worker didn't start."); };
+  w.onmessage = ({ data: m }) => {
+    if (worker !== w) return;
     if (m.type === 'ready') {
       runtime = `LiteRT.js wasm · ${m.numThreads} thread${m.numThreads === 1 ? '' : 's'}${m.threads ? '' : ' (page not cross-origin isolated)'}`;
       result.runtime = { threads: m.threads, numThreads: m.numThreads, loadMs: m.loadMs };
@@ -295,13 +310,9 @@ async function open(name, blob, { useCache = isDefaultFor(mode) } = {}) {
       const notesTime = runMode === 'original' ? ` · note creation ${(m.decodeMs / 1000).toFixed(2)} s` : '';
       setStats(`${modeLabel(!cacheable)} · ${runtime} · ${(duration / (m.elapsedMs / 1000)).toFixed(1)}× real time · model ${(m.modelMs / 1000).toFixed(2)} s for ${duration.toFixed(1)} s of audio${notesTime}`);
       if (cacheable) cache.save({ key, name, duration, totalFrames, notes: result.notes, activation: roll.activation() });
-    } else if (m.type === 'error') {
-      setStatus(`Something went wrong: ${m.message.split('\n')[0]}`);
-      result.error = m.message;
-      console.error(m.message);
-    }
+    } else if (m.type === 'error') fail(m.message);
   };
-  worker.postMessage({ type: 'transcribe', audio: samples, mode: runMode, params: runSettings, view }, [samples.buffer]);
+  w.postMessage({ type: 'transcribe', audio: samples, mode: runMode, params: runSettings, view }, [samples.buffer]);
 }
 
 // --- Playback: the song through an <audio> element, the notes through a synth, mixed in one
@@ -348,9 +359,11 @@ function applyMix() {
   graph.notes.gain.value = g.notes;
 }
 
-// The notes the synth plays: velocities of live notes come from the activations seen so far.
-function synthNotes() {
+// The notes the synth plays: velocities of live notes come from the activations seen so far. When the
+// notes are replaced (not just added to), voices already scheduled are stopped.
+function synthNotes({ replace = false } = {}) {
   if (!graph) return;
+  if (replace) graph.player.reset();
   graph.player.setNotes(results.map(([s, e, pitch, , , vel]) => ({
     t0: frameToTime(s), t1: frameToTime(e), pitch,
     velocity: vel ?? velocity(meanActivation(roll.tiles, FRAMES_PER_WINDOW, s, e, pitch)),
@@ -366,7 +379,7 @@ function setBalance(v, fromKnob = false) {
 }
 for (const input of document.querySelectorAll('input[name="listen"]')) {
   input.checked = input.value === preset(balance);
-  input.addEventListener('change', () => setBalance(PRESETS[input.value]));
+  input.addEventListener('click', () => setBalance(PRESETS[input.value])); // also when it already looks picked
 }
 mixKnob = createKnob(MIX, balance, (v) => setBalance(v, true));
 document.querySelector('.unit.mix .knobs').append(mixKnob.root);
@@ -382,11 +395,11 @@ function frame(now) {
   last = { t, now };
   roll.setPlayhead(t, motion);
   showTime(t);
-  if (!audio.paused) graph?.player.tick(t);
   raf = audio.paused ? 0 : requestAnimationFrame(frame);
 }
 
 function seek(t) {
+  if (mic || !audio.getAttribute('src')) return;
   audio.currentTime = t;
   clock.reset();
   last = null;
@@ -404,7 +417,11 @@ function toggle() {
   audio.play().catch((err) => setStats(`Can't play this file here: ${err.message}`));
 }
 
+// The synth is scheduled from a timer rather than animation frames, which stop in background tabs.
+let synthTimer = 0;
 audio.addEventListener('play', () => {
+  clearInterval(synthTimer);
+  synthTimer = setInterval(() => { if (!audio.paused) graph?.player.tick(clock.time()); }, 30);
   $('player').classList.add('playing');
   $('play').setAttribute('aria-label', 'Pause');
   last = null;
@@ -413,6 +430,7 @@ audio.addEventListener('play', () => {
   if (!raf) raf = requestAnimationFrame(frame);
 });
 const paused = () => {
+  clearInterval(synthTimer);
   $('player').classList.remove('playing');
   $('play').setAttribute('aria-label', 'Play');
   graph?.player.reset();
@@ -448,11 +466,45 @@ addEventListener('keydown', (e) => {
 const MIN_VIEW = 8; // seconds shown while a recording is still short
 let mic = null, micLast = null;
 
+let micStarting = false;
 async function startRecording() {
-  if (mic) return;
+  if (mic || micStarting) return;
+  micStarting = true;
+  const id = opened, before = $('status').textContent;
+  const name = `recording-${new Date().toTimeString().slice(0, 8).replaceAll(':', '')}.wav`;
+  const session = { name, runtime: '', chunks: [], samples: 0, liveSettings: JSON.stringify(settings.live) };
+  const result = { name, mode: 'live', duration: 0, notes: [], order: [], recording: true };
+  // Its own worker, so asking for the microphone doesn't disturb what's open until it's granted.
+  const w = new Worker('worker.js');
+  w.onmessage = ({ data: m }) => { if (worker === w) recordingMessage(m, session, result); };
+  w.postMessage({ type: 'stream-start', params: allSettings() });
+  setStatus('Asking for the microphone…');
+  let capture;
+  try {
+    capture = await startMic((chunk) => {
+      session.chunks.push(chunk.slice());
+      session.samples += chunk.length;
+      w.postMessage({ type: 'stream-audio', samples: chunk }, [chunk.buffer]);
+    });
+  } catch (err) {
+    micStarting = false;
+    w.terminate();
+    if (id === opened) setStatus(`Couldn't use the microphone: ${err.message}`);
+    if (!current && !finished) setTimeout(() => { if (id === opened && !mic) setStatus(before); }, 4000);
+    return;
+  }
+  micStarting = false;
+  if (id !== opened) { // something else was opened while the browser asked
+    capture.stop();
+    w.terminate();
+    return;
+  }
+  // Granted: the recording replaces whatever was open.
   ++opened;
   decodeId = 0;
   worker?.terminate();
+  worker = w;
+  mic = capture;
   audio.pause();
   if (audio.getAttribute('src')) { audio.removeAttribute('src'); audio.load(); }
   $('player').hidden = true;
@@ -462,29 +514,9 @@ async function startRecording() {
   $('again').hidden = true;
   $('download').hidden = true;
   showTranscribe();
-  const name = `recording-${new Date().toTimeString().slice(0, 8).replaceAll(':', '')}.wav`;
-  const session = { name, runtime: '', chunks: [], samples: 0 };
-  const result = { name, mode: 'live', duration: 0, notes: [], order: [], recording: true };
   window.basicPitch = result;
-  const w = (worker = new Worker('worker.js'));
-  w.onmessage = ({ data: m }) => { if (worker === w) recordingMessage(m, session, result); };
-  w.postMessage({ type: 'stream-start', params: allSettings() });
   roll.reset(MIN_VIEW, 0);
   roll.anchor = 0.85; // the live edge near the right, the past to its left
-  setStatus('Asking for the microphone…');
-  try {
-    mic = await startMic((chunk) => {
-      session.chunks.push(chunk.slice());
-      session.samples += chunk.length;
-      w.postMessage({ type: 'stream-audio', samples: chunk }, [chunk.buffer]);
-    });
-  } catch (err) {
-    w.terminate();
-    if (worker === w) worker = null;
-    roll.anchor = ANCHOR;
-    setStatus(`Couldn't use the microphone: ${err.message}`);
-    return;
-  }
   Object.assign(mic, { session, start: mic.ctx.currentTime });
   $('mic').classList.add('recording');
   $('mic').querySelector('span').textContent = 'Stop';
@@ -514,6 +546,7 @@ function stopRecording() {
   worker?.postMessage({ type: 'stream-stop' });
   $('mic').classList.remove('recording');
   $('mic').querySelector('span').textContent = 'Mic';
+  roll.anchor = ANCHOR;
   const samples = new Float32Array(m.session.samples);
   let o = 0;
   for (const c of m.session.chunks) { samples.set(c, o); o += c.length; }
@@ -566,7 +599,9 @@ async function recordingMessage(m, session, result) {
     setStatus(`${name}: ${result.notes.length} notes`);
     setStats(`Microphone · ${modeLabel(!isDefaultFor('live'))} · ${session.runtime} · model ${(m.modelMs / 1000).toFixed(2)} s for ${duration.toFixed(1)} s of audio`);
     current.hash = await cache.fileHash(await session.blob.arrayBuffer()).catch(() => null);
-    if (mode !== 'live') decodeAgain(); // the worker has everything it needs for the original decoder
+    // The worker has the whole recording's model output: re-decode for the original decoder, or for
+    // live settings changed while recording.
+    if (mode !== 'live' || JSON.stringify(settings.live) !== session.liveSettings) decodeAgain();
     else if (isDefaultFor('live')) cache.save({ key: cache.resultKey(current.hash, 'live'), name, duration, totalFrames: m.totalFrames, notes: result.notes, activation: roll.activation() });
   } else if (m.type === 'decoded') {
     applyDecoded(m, { name: session.name, duration: session.duration, totalFrames: session.totalFrames });
@@ -611,9 +646,16 @@ $('file').addEventListener('change', (e) => {
 });
 
 $('example').addEventListener('click', async () => {
+  const id = opened;
   setStatus('Loading the example…');
-  const res = await fetch('examples/vocadito_10.wav');
-  open('vocadito_10.wav', await res.blob());
+  try {
+    const res = await fetch('examples/vocadito_10.wav');
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const blob = await res.blob();
+    if (id === opened && !mic) open('vocadito_10.wav', blob);
+  } catch (err) {
+    if (id === opened) setStatus(`Couldn't load the example: ${err.message}`);
+  }
 });
 
 $('again').addEventListener('click', () => current && open(current.name, current.blob, { useCache: false }));
@@ -632,7 +674,8 @@ $('download').addEventListener('click', () => {
 });
 $('forget').addEventListener('click', async () => {
   await cache.clear();
-  setStats('Cleared the results saved in this browser.');
+  $('forget').textContent = 'cleared';
+  setTimeout(() => { $('forget').textContent = 'clear them'; }, 2500);
 });
 
 let dragDepth = 0;

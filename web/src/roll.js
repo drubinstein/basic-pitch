@@ -50,11 +50,12 @@ export class PianoRoll {
     this.pps = null; // fit on next draw
     this.lastView = '';
     this.playhead = null; // seconds, once there's audio
+    if (this.following) this.onFollow(false);
     this.following = false;
     this.hover = null;
     this.selected = null;
     this.sounding = [];
-    this.shown = null;
+    this.shown = ''; // forces the next draw to report "no note" if a tooltip was up
     this.request();
   }
 

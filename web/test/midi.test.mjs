@@ -55,16 +55,16 @@ test('notes land on the nearest tick, with their pitch and velocity', () => {
   const ev = readMidi(toMidi(notes)).tracks[1].filter((e) => e.kind);
   assert.deepEqual(ev, [
     { tick: 54, kind: 0x90, pitch: 60, vel: 100 },
-    { tick: 396, kind: 0x80, pitch: 60, vel: 0 },
+    { tick: 396, kind: 0x90, pitch: 60, vel: 0 },
     { tick: 440, kind: 0x90, pitch: 64, vel: 70 },
-    { tick: 660, kind: 0x80, pitch: 64, vel: 0 },
+    { tick: 660, kind: 0x90, pitch: 64, vel: 0 },
   ]);
 });
 
 test('a note ending where the next one at that pitch starts is released first', () => {
   const notes = [{ t0: 1, t1: 2, pitch: 60, velocity: 80 }, { t0: 0, t1: 1, pitch: 60, velocity: 80 }];
   const ev = readMidi(toMidi(notes)).tracks[1].filter((e) => e.kind && e.tick === 440);
-  assert.deepEqual(ev.map((e) => e.kind), [0x80, 0x90]);
+  assert.deepEqual(ev.map((e) => e.vel), [0, 80]); // note-offs are note-ons with velocity 0, like pretty_midi's
 });
 
 test('notes shorter than a tick still last one tick', () => {

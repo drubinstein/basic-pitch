@@ -19,7 +19,7 @@ test('original knobs default to predict()\'s settings', () => {
 });
 
 test('every knob\'s default is inside its range and on its step', () => {
-  for (const k of [...LIVE, ...ORIGINAL].filter((k) => k.kind !== 'switch')) {
+  for (const k of [...LIVE, ...ORIGINAL].filter((d) => d.kind !== 'switch')) {
     assert.ok(k.min <= k.default && k.default <= k.max, k.key);
     assert.equal(snap(k.default, k), k.default, k.key);
   }

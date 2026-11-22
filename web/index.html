@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -12,7 +12,7 @@
     :root {
       color-scheme: light dark;
       --bg: #f7f7f5; --surface: #ffffff; --text: #1d1d1f; --text-muted: #6b6b70; --border: #dcdcdf;
-      --accent: #2f6fde; --accent-strong: #1d4fae; --heat: #e0782f;
+      --accent: #2f6fde; --accent-strong: #1d4fae; --accent-fill: #2f6fde; --link: #1d5bc8; --heat: #e0782f;
       --roll-bg: #ffffff; --roll-black-key: #f1f1f3; --roll-grid: #e2e2e6; --roll-pending: rgba(127, 127, 135, 0.08);
       --key-white: #fbfbfc; --key-black: #3a3a40; --note-active: #12a150; --playhead: #d6402f;
       --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
@@ -21,7 +21,7 @@
     @media (prefers-color-scheme: dark) {
       :root {
         --bg: #121214; --surface: #1b1b1e; --text: #ececef; --text-muted: #9a9aa2; --border: #303036;
-        --accent: #6f9cf0; --accent-strong: #a9c4f7; --heat: #f0a050;
+        --accent: #6f9cf0; --accent-strong: #a9c4f7; --accent-fill: #3566c8; --link: #8fb3f5; --heat: #f0a050;
         --roll-bg: #161618; --roll-black-key: #1d1d21; --roll-grid: #2a2a30; --roll-pending: rgba(160, 160, 170, 0.07);
         --key-white: #2a2a2f; --key-black: #0c0c0e; --note-active: #3ddc84; --playhead: #ff6b5b;
         --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
@@ -31,7 +31,8 @@
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
     body { background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; display: flex; flex-direction: column; }
-    a { color: var(--accent); }
+    a { color: var(--link); }
+    main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
     [hidden] { display: none !important; }
 
     /* Top bar and tabs */
@@ -50,6 +51,7 @@
     #panel-transcribe { display: flex; flex-direction: column; }
     #stage { position: relative; flex: 1; display: flex; min-width: 0; min-height: 360px; }
     #roll { flex: 1; width: 100%; height: 100%; touch-action: none; cursor: grab; outline: none; display: block; }
+    #roll:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
     #roll:active { cursor: grabbing; }
     button, .file { font: inherit; font-size: 14px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
     button:hover { border-color: var(--accent); }
@@ -58,26 +60,30 @@
     .float { position: absolute; z-index: 3; }
     .float, .float button, .float .modes, .float .chip { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18), 0 1px 8px rgba(0, 0, 0, 0.06); }
     .float button, .float .chip { border: 0; }
-    .searchbar { top: 12px; left: 52px; display: flex; gap: 6px; align-items: center; background: var(--surface); border-radius: 24px; padding: 4px 6px 4px 4px; width: min(480px, calc(100% - 64px)); }
+    .overlay { top: 12px; left: 52px; right: 64px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; box-shadow: none; pointer-events: none; }
+    .overlay > * { pointer-events: auto; max-width: 100%; }
+    .searchbar { display: flex; gap: 6px; align-items: center; background: var(--surface); border-radius: 24px; padding: 4px 6px 4px 4px; width: 480px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18), 0 1px 8px rgba(0, 0, 0, 0.06); }
     .searchbar .search { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-radius: 20px; cursor: pointer; color: var(--text); }
     .searchbar .search:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
     .searchbar .search svg { color: var(--accent); }
-    .searchbar .search input { display: none; }
+    .searchbar .search input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; } /* hidden but focusable */
+    .searchbar .search:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; }
     #status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 550; }
     .searchbar .icon { box-shadow: none; background: transparent; padding: 7px; border-radius: 50%; display: grid; place-items: center; color: var(--text-muted); }
     .searchbar .icon:hover { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); }
-    .chips { top: 64px; left: 52px; right: 64px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; box-shadow: none; }
+    .chips { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 2px; }
+    .chips > * { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18), 0 1px 8px rgba(0, 0, 0, 0.06); }
     .chip { font-size: 13.5px; padding: 6px 14px; border-radius: 18px; background: var(--surface); }
     .modes { display: inline-flex; border-radius: 18px; overflow: hidden; background: var(--surface); }
     .modes label, .listen label { font-size: 13.5px; padding: 6px 13px; cursor: pointer; }
     .modes input, .listen input { position: absolute; opacity: 0; pointer-events: none; }
-    .modes label:has(input:checked), .listen label:has(input:checked) { background: var(--accent); color: #fff; }
+    .modes label:has(input:checked), .listen label:has(input:checked) { background: var(--accent-fill); color: #fff; }
     .modes label:has(input:focus-visible), .listen label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
-    .stats { top: 102px; left: 52px; right: 64px; box-shadow: none; font-size: 12px; color: var(--text-muted); }
+    .stats { font-size: 12px; color: var(--text-muted); }
     .stats:empty { display: none; }
     .stats span { background: color-mix(in srgb, var(--surface) 85%, transparent); border-radius: 6px; padding: 2px 6px; }
     .fab { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 10px; background: var(--surface); font-size: 13.5px; }
-    .layers { left: 52px; bottom: 34px; box-shadow: none; }
+    .layers { left: 52px; bottom: 34px; box-shadow: none; z-index: 4; }
     .pop { position: absolute; bottom: calc(100% + 8px); left: 0; background: var(--surface); border-radius: 10px; padding: 10px 14px; min-width: 230px;
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22); display: grid; gap: 8px; font-size: 14px; }
     .pop label { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
@@ -90,21 +96,29 @@
     .zoom .stack button + button { border-top: 1px solid var(--border); }
     #follow[aria-pressed="true"] { color: var(--accent); }
     .player { bottom: 34px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: var(--surface); border-radius: 28px; padding: 5px 6px 5px 5px; }
-    .player .play { width: 42px; height: 42px; border-radius: 50%; padding: 0; display: grid; place-items: center; background: var(--accent); color: #fff; box-shadow: none; }
+    .player .play { width: 42px; height: 42px; border-radius: 50%; padding: 0; display: grid; place-items: center; background: var(--accent-fill); color: #fff; box-shadow: none; }
     .player .play .i-pause, .player.playing .play .i-play { display: none; }
     .player.playing .play .i-pause { display: block; }
-    .player .clock { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--text-muted); min-width: 8.5em; }
+    .player .clock { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--text-muted); min-width: 8.5em; white-space: nowrap; }
     .player .clock #time { color: var(--text); font-weight: 600; }
     .listen { display: inline-flex; border: 1px solid var(--border); border-radius: 18px; overflow: hidden; }
+    @media (max-height: 560px) { .zoom .stack { display: none; } }
     @media (max-width: 640px) {
       .top .ext { display: none; }
-      .searchbar { left: 48px; width: calc(100% - 60px); }
-      .chips, .stats { left: 48px; right: 12px; }
-      .player { bottom: 96px; }
-      .zoom { bottom: 150px; }
+      .overlay { left: 46px; right: 56px; }
+      .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+      .chips > * { flex: none; }
+      .zoom .stack { display: none; } /* pinch to zoom */
+      .player { bottom: 30px; left: 46px; right: 56px; transform: none; justify-content: space-between; }
+      .player { gap: 6px; }
+      .player .clock { min-width: 0; font-size: 12px; }
+      .player .play { width: 36px; height: 36px; }
+      .listen label { padding: 6px 8px; font-size: 12.5px; }
+      .layers { bottom: 92px; left: 46px; }
+      .panel-head span { display: none; }
     }
     .chip svg { width: 16px; height: 16px; vertical-align: -3px; margin-right: 2px; }
-    #controls[aria-pressed="true"] { background: var(--accent); color: #fff; }
+    #controls[aria-pressed="true"] { background: var(--accent-fill); color: #fff; }
     #mic.recording { background: #d6402f; color: #fff; animation: pulse 1.6s ease-in-out infinite; }
     @keyframes pulse { 50% { box-shadow: 0 0 0 6px rgba(214, 64, 47, 0.25); } }
     @media (prefers-reduced-motion: reduce) { #mic.recording { animation: none; } }
@@ -170,7 +184,7 @@
     #tip .tip-lag { color: var(--text-muted); }
     #drop { position: fixed; inset: 10px; z-index: 10; pointer-events: none; display: grid; place-items: center; border: 3px dashed var(--accent);
       border-radius: 16px; background: color-mix(in srgb, var(--accent) 12%, transparent); font-size: 20px; font-weight: 600; color: var(--accent-strong); }
-    .link { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; box-shadow: none; }
+    .link { font: inherit; color: var(--link); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; box-shadow: none; }
 
     /* Text tabs */
     .doc { overflow-y: auto; font-size: 16px; line-height: 1.55; }
@@ -198,7 +212,7 @@
     .results td.dim { color: var(--text-muted); }
     .table-title { margin: 18px 0 2px; font-size: 15.5px; }
     .table-view { margin: 6px 0 0; font-size: 14px; }
-    .table-view summary { cursor: pointer; color: var(--accent); }
+    .table-view summary { cursor: pointer; color: var(--link); }
     .table-view table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
     .refs li { margin-bottom: 4px; }
     figure.diagram { margin: 14px 0; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow-x: auto; }
@@ -218,7 +232,7 @@
     .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
     .seg button { border: 0; border-radius: 0; font-size: 13px; padding: 5px 10px; background: transparent; }
     .seg button + button { border-left: 1px solid var(--border); }
-    .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+    .seg button[aria-pressed="true"] { background: var(--accent-fill); color: #fff; }
     .legend { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 0; margin: 0 0 6px; font-size: 13px; color: var(--text-muted); }
     .legend .key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
     .legend .key.dot { border-radius: 50%; width: 10px; height: 10px; }
@@ -254,26 +268,29 @@
     <a class="ext" href="https://basicpitch.spotify.com/">Spotify's original Basic Pitch demo ↗</a>
   </header>
 
+  <main>
   <section id="panel-transcribe" class="panel" aria-label="Transcribe">
     <div id="stage">
       <canvas id="roll" tabindex="0" aria-label="Piano roll of transcribed notes"></canvas>
       <div id="tip" role="tooltip" hidden></div>
 
-      <div class="float searchbar">
-        <label class="search" title="Open an audio file (or drop one anywhere)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12v0M6 9v6M9 5v14M12 8v8M15 3v18M18 8v8M21 11v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span id="status">Open or drop an audio file…</span><input id="file" type="file" accept="audio/*"></label>
-        <button id="download" class="icon" type="button" hidden title="Download MIDI (written like basic-pitch's, without pitch bends)" aria-label="Download MIDI"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-        <button id="again" class="icon" type="button" hidden title="Transcribe again" aria-label="Transcribe again"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-      </div>
-      <div class="float chips">
-        <div class="modes" role="radiogroup" aria-label="How notes are made">
-          <label title="Streaming HMM decoder: notes appear while the file is transcribed, each as soon as it is final"><input type="radio" name="mode" value="live" checked> Live</label>
-          <label title="Basic Pitch's own note creation with the melodia trick, as in the basic-pitch package: notes appear once the whole file is transcribed"><input type="radio" name="mode" value="original"> Original</label>
+      <div class="float overlay">
+        <div class="searchbar">
+          <label class="search" title="Open an audio file (or drop one anywhere)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12v0M6 9v6M9 5v14M12 8v8M15 3v18M18 8v8M21 11v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span id="status">Open or drop an audio file…</span><input id="file" type="file" accept="audio/*"></label>
+          <button id="download" class="icon" type="button" hidden title="Download MIDI (written like basic-pitch's, without pitch bends)" aria-label="Download MIDI"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button id="again" class="icon" type="button" hidden title="Transcribe again" aria-label="Transcribe again"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>
-        <button id="controls" class="chip" type="button" aria-pressed="false" aria-controls="control-panel" title="Knobs for each decoder's settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v18M12 3v18M18 3v18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><rect x="3.5" y="13" width="5" height="3.5" rx="1.2" fill="currentColor"/><rect x="9.5" y="6" width="5" height="3.5" rx="1.2" fill="currentColor"/><rect x="15.5" y="10" width="5" height="3.5" rx="1.2" fill="currentColor"/></svg> Control panel</button>
-        <button id="example" class="chip" type="button">Try an example</button>
-        <button id="mic" class="chip" type="button" title="Transcribe from your microphone"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> <span>Mic</span></button>
+        <div class="chips">
+          <div class="modes" role="radiogroup" aria-label="How notes are made">
+            <label title="Streaming HMM decoder: notes appear while the file is transcribed, each as soon as it is final"><input type="radio" name="mode" value="live" checked> Live</label>
+            <label title="Basic Pitch's own note creation with the melodia trick, as in the basic-pitch package: notes appear once the whole file is transcribed"><input type="radio" name="mode" value="original"> Original</label>
+          </div>
+          <button id="controls" class="chip" type="button" aria-pressed="false" aria-controls="control-panel" title="Knobs for each decoder's settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v18M12 3v18M18 3v18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><rect x="3.5" y="13" width="5" height="3.5" rx="1.2" fill="currentColor"/><rect x="9.5" y="6" width="5" height="3.5" rx="1.2" fill="currentColor"/><rect x="15.5" y="10" width="5" height="3.5" rx="1.2" fill="currentColor"/></svg> Control panel</button>
+          <button id="example" class="chip" type="button">Try an example</button>
+          <button id="mic" class="chip" type="button" title="Transcribe from your microphone"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> <span>Mic</span></button>
+        </div>
+        <div id="stats" class="stats"></div>
       </div>
-      <div id="stats" class="float stats"></div>
 
       <div class="float layers">
         <button id="layers" class="fab" type="button" aria-expanded="false" aria-controls="layers-pop" title="Layers"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="6" y="7.5" width="6" height="2.5" rx="1" fill="currentColor"/><rect x="10" y="11" width="8" height="2.5" rx="1" fill="currentColor"/><rect x="6" y="14.5" width="5" height="2.5" rx="1" fill="currentColor"/></svg><span>Layers</span></button>
@@ -371,22 +388,26 @@
 
       <h3>Move around</h3>
       <table class="keys">
+        <tbody>
         <tr><td>Drag, or scroll sideways</td><td>Pan</td></tr>
         <tr><td>Pinch, <kbd>ctrl</kbd>+scroll, or scroll</td><td>Zoom around the pointer</td></tr>
         <tr><td>Double-click (<kbd>shift</kbd> to zoom out)</td><td>Zoom in</td></tr>
         <tr><td><kbd>0</kbd>, or the fit button at the bottom right</td><td>Show the whole file</td></tr>
         <tr><td>The <b>+</b> and <b>−</b> buttons</td><td>Zoom</td></tr>
         <tr><td><kbd>←</kbd> <kbd>→</kbd> · <kbd>+</kbd> <kbd>−</kbd></td><td>Pan · zoom</td></tr>
+        </tbody>
       </table>
       <p>Whatever is on screen is transcribed first. Shaded stretches aren't transcribed yet. <b>Layers</b> (bottom
         left) shows or hides the model's output before decoding (the orange heat map) and the notes.</p>
 
       <h3>Listen</h3>
       <table class="keys">
+        <tbody>
         <tr><td><kbd>space</kbd> or the play button</td><td>Play or pause</td></tr>
         <tr><td>Click empty space on the roll</td><td>Jump there</td></tr>
         <tr><td>Pan while playing</td><td>Stop following the playhead (the playhead button at the bottom right brings it back)</td></tr>
         <tr><td><b>Song</b> · <b>Notes</b> · <b>Both</b></td><td>Hear the original, the transcribed notes on a simple synth, or the notes over the song to compare. The <b>Mix</b> knob in the control panel sets anything in between.</td></tr>
+        </tbody>
       </table>
       <p>While playing, the view scrolls so the playhead stays a quarter of the way in, leaving most of the screen for
         what's coming. Notes under the playhead turn green and their keys light up on the keyboard at the left.</p>
@@ -504,7 +525,7 @@
         and ran the ceiling check: the same sweep, tuned and scored on the test tracks themselves.</p>
       <div class="scroll">
         <table class="results">
-          <thead><tr><th>Streaming HMM, scored on the 20 vocadito test tracks</th><th>Fno<br>(onsets)</th><th>F<br>(with offsets)</th><th>Tracks beaten<br>on Fno</th><th>Tracks beaten<br>on F</th><th>Onset delay<br>(median)</th></tr></thead>
+          <thead><tr><th scope="col">Streaming HMM, scored on the 20 vocadito test tracks</th><th scope="col">Fno<br>(onsets)</th><th scope="col">F<br>(with offsets)</th><th scope="col">Tracks beaten<br>on Fno</th><th scope="col">Tracks beaten<br>on F</th><th scope="col">Onset delay<br>(median)</th></tr></thead>
           <tbody>
             <tr class="bar"><td>Original, re-tuned on dev (the bar)</td><td>.563</td><td>.387</td><td>–</td><td>–</td><td>whole file</td></tr>
             <tr><td>Tuned on dev, ~0 ms budget</td><td>.555</td><td>.410</td><td>30%</td><td>60%</td><td>12 ms</td></tr>
@@ -610,6 +631,7 @@
     </article>
   </section>
 
+  </main>
   <div id="drop" hidden>Drop an audio file to transcribe it</div>
   <audio id="audio" preload="auto"></audio>
   <script type="module" src="app.js"></script>

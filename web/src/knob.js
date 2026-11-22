@@ -71,7 +71,12 @@ export function createKnob(def, value, onChange, { small = false } = {}) {
   dial.addEventListener('pointerup', end);
   dial.addEventListener('pointercancel', end);
   dial.addEventListener('dblclick', () => set(def.default));
-  dial.addEventListener('wheel', (e) => { e.preventDefault(); set(value + (e.deltaY < 0 ? 1 : -1) * def.step * (e.shiftKey ? 1 : Math.max(1, Math.round((def.max - def.min) / def.step / 50)))); }, { passive: false });
+  dial.addEventListener('wheel', (e) => {
+    // Sideways scrolling scrolls the panel; up and down turns the knob.
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    e.preventDefault();
+    set(value + (e.deltaY < 0 ? 1 : -1) * def.step * (e.shiftKey ? 1 : Math.max(1, Math.round((def.max - def.min) / def.step / 50))));
+  }, { passive: false });
   dial.addEventListener('keydown', (e) => {
     const big = Math.max(1, Math.round((def.max - def.min) / def.step / 10));
     const moves = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1, PageUp: big, PageDown: -big };

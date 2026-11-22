@@ -6,13 +6,18 @@
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "build": "node build.mjs",
-    "serve": "node serve.mjs"
+    "serve": "node serve.mjs",
+    "lint": "eslint . && html-validate index.html report.html"
   },
   "dependencies": {
     "@litertjs/core": "2.6.0",
     "coi-serviceworker": "0.1.7"
   },
   "devDependencies": {
-    "esbuild": "0.28.2"
+    "@eslint/js": "^9.39.1",
+    "esbuild": "0.28.2",
+    "eslint": "^9.39.1",
+    "globals": "^16.5.0",
+    "html-validate": "^9.5.5"
   }
 }

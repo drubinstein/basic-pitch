@@ -48,7 +48,7 @@ function legend(parent, items, kind = 'rect') {
 }
 
 // A chart frame: an SVG that redraws on resize, plus one tooltip.
-function frame(parent, height, draw) {
+function frame(parent, height, label, draw) {
   const box = html('div', { class: 'chart' }, parent);
   const tip = html('div', { class: 'chart-tip', role: 'status', hidden: '' }, box);
   let svg = null;
@@ -56,7 +56,7 @@ function frame(parent, height, draw) {
     const w = box.clientWidth;
     if (!w) return;
     svg?.remove();
-    svg = el('svg', { width: w, height, viewBox: `0 0 ${w} ${height}`, role: 'img' });
+    svg = el('svg', { width: w, height, viewBox: `0 0 ${w} ${height}`, role: 'img', 'aria-label': typeof label === 'function' ? label() : label });
     box.insertBefore(svg, tip);
     tip.hidden = true;
     draw(svg, w, height, show);
@@ -97,7 +97,7 @@ function table(parent, summary, head, rows) {
   html('summary', {}, details, summary);
   const wrap = html('div', { class: 'scroll' }, details), t = html('table', {}, wrap);
   const tr = html('tr', {}, html('thead', {}, t));
-  for (const h of head) html('th', {}, tr, h);
+  for (const h of head) html('th', { scope: 'col' }, tr, h);
   const tb = html('tbody', {}, t);
   for (const r of rows) { const row = html('tr', {}, tb); for (const c of r) html('td', {}, row, c); }
 }
@@ -108,7 +108,7 @@ function beatsChart(root) {
   const controls = html('div', { class: 'chart-controls' }, root);
   toggles(controls, 'Score', [['Fno', 'Fno (onsets)'], ['F', 'F (with offsets)']], metric, (m) => { metric = m; chart.render(); });
   legend(root, ORDER.map((k) => [SERIES[k], NAME[k]]));
-  const chart = frame(root, 300, (svg, W, H, show) => {
+  const chart = frame(root, 300, () => `Bar chart: share of test tracks each decoder beats the tuned original on, by ${metric}, per dataset. The table below has the numbers.`, (svg, W, H, show) => {
     const L = 40, R = 8, T = 16, B = H - 28, y = yAxis(svg, [0, 0.25, 0.5, 0.75, 1], L, W - R, T, B, pct);
     const groups = data.datasets, gw = (W - L - R) / groups.length;
     const bw = Math.min(24, (gw * 0.7) / ORDER.length - 2);
@@ -149,7 +149,7 @@ function tracksChart(root) {
     const c = data.trackColumns, short = DEC.find(([k]) => k === dec)[1];
     return [c.indexOf(`bar ${metric}`), c.indexOf(`${short} ${metric}`)];
   };
-  const chart = frame(root, 260, (svg, W, H, show) => {
+  const chart = frame(root, 260, () => `Columns: each ${DS[ds].name} test track's ${metric} for ${NAME[dec]} minus the tuned original's, sorted. The table below lists every track.`, (svg, W, H, show) => {
     const [bc, dc] = cols(), { gaps } = trackGaps(data.tracks[ds], bc, dc);
     const m = Math.max(0.02, ...gaps.map((g) => Math.abs(g.gap)));
     const L = 44, R = 8, T = 12, B = H - 22, ticks = niceTicks(-m, m, 4);
@@ -193,7 +193,7 @@ function sweepChart(root) {
   legend(root, SWEEPS.map(([, n, c]) => [c, n]), 'dot');
   const col = () => METRICS.find(([k]) => k === metric)[2], isShare = () => metric.startsWith('beat');
   const fmt = (v) => (isShare() ? pct(v) : f3(v));
-  const chart = frame(root, 320, (svg, W, H, show) => {
+  const chart = frame(root, 320, () => `Scatter: ${METRICS.find(([k]) => k === metric)[1]} against median onset delay for every HMM setting tried on vocadito. The table below has the best setting per delay band.`, (svg, W, H, show) => {
     const c = col(), pts = SWEEPS.flatMap(([k, , color]) => data.sweeps[k].trials.map((t) => ({ t, k, color })));
     // Scores: from just under the 15th percentile, so the settings that broke don't flatten the rest.
     const vals = pts.map((p) => p.t[c]).sort((a, b) => a - b);
@@ -246,7 +246,7 @@ function resultsTable(root) {
   const wrap = html('div', { class: 'scroll' }, root), t = html('table', { class: 'results' }, wrap);
   const head = html('tr', {}, html('thead', {}, t));
   for (const h of ['Decoder', 'Fno\n(onsets)', 'F\n(with offsets)', 'Tracks beaten\non Fno', 'Tracks beaten\non F', 'Onset delay\n(median)']) {
-    const th = html('th', {}, head);
+    const th = html('th', { scope: 'col' }, head);
     h.split('\n').forEach((part, i) => { if (i) th.append(document.createElement('br')); th.append(part); });
   }
   const body = html('tbody', {}, t);
