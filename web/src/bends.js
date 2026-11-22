@@ -50,3 +50,13 @@ export function dropOverlapping(notes) {
   }
   return sorted;
 }
+
+// The same from the rows kept per model window (framesPerWindow x 88 each); missing windows bend by 0.
+export function bendsFromTiles(tiles, framesPerWindow, s, e, pitch) {
+  const out = new Int8Array(Math.max(0, e - s));
+  for (let t = s; t < e; t++) {
+    const tile = tiles[Math.floor(t / framesPerWindow)];
+    if (tile) out[t - s] = tile[(t % framesPerWindow) * N_PITCHES + pitch - 21];
+  }
+  return out;
+}

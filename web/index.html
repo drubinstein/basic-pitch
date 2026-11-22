@@ -277,7 +277,7 @@
       <div class="float overlay">
         <div class="searchbar">
           <label class="search" title="Open an audio file (or drop one anywhere)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12v0M6 9v6M9 5v14M12 8v8M15 3v18M18 8v8M21 11v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span id="status">Open or drop an audio file…</span><input id="file" type="file" accept="audio/*"></label>
-          <button id="download" class="icon" type="button" hidden title="Download MIDI (written like basic-pitch's, without pitch bends)" aria-label="Download MIDI"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button id="download" class="icon" type="button" hidden title="Download MIDI (written like basic-pitch's, with pitch bends)" aria-label="Download MIDI"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           <button id="again" class="icon" type="button" hidden title="Transcribe again" aria-label="Transcribe again"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>
         <div class="chips">
@@ -297,6 +297,7 @@
         <div id="layers-pop" class="pop" hidden>
           <label><input type="checkbox" data-layer="heat" checked> Model output <small>before decoding</small></label>
           <label><input type="checkbox" data-layer="notes" checked> Notes</label>
+          <label><input type="checkbox" data-layer="bends" checked> Pitch bends <small>from the model's contour output</small></label>
         </div>
       </div>
 
@@ -398,7 +399,9 @@
         </tbody>
       </table>
       <p>Whatever is on screen is transcribed first. Shaded stretches aren't transcribed yet. <b>Layers</b> (bottom
-        left) shows or hides the model's output before decoding (the orange heat map) and the notes.</p>
+        left) shows or hides the model's output before decoding (the orange heat map), the notes, and their pitch bends:
+        the line through a note follows its pitch frame by frame, from the model's contour output, the way
+        <code>basic-pitch</code> computes bends.</p>
 
       <h3>Listen</h3>
       <table class="keys">
@@ -413,13 +416,14 @@
         what's coming. Notes under the playhead turn green and their keys light up on the keyboard at the left.</p>
 
       <h3>Notes</h3>
-      <p>Hover a note for its name, MIDI number, frequency and timing. Click to pin it; <kbd>esc</kbd> or a click
+      <p>Hover a note for its name, MIDI number, frequency, timing and how far it bends. Click to pin it; <kbd>esc</kbd> or a click
         elsewhere clears it. In Live mode the tooltip also shows the decoder lag: how long after the note began the
         decoder was sure of its start.</p>
 
       <h3>Save</h3>
       <p>The download button in the search bar writes the notes the way <code>basic-pitch</code> does (120 bpm, Electric Piano 1,
-        velocity from how strong the note is), without pitch bends. Finished results are kept in this browser, per file
+        velocity from how strong the note is, and pitch bends except on notes that overlap another, since one MIDI
+        channel bends every note at once). Finished results are kept in this browser, per file
         and mode, so reopening a file is instant; the circular arrow next to it transcribes again. Saved results:
         <button id="forget" class="link" type="button">clear them</button>.</p>
     </article>
@@ -572,8 +576,8 @@
         <li><b>No learned decoder yet</b>, for the reasons above.</li>
         <li><b>Original mode stays for comparison.</b> It is a line-by-line port of
           <code>output_to_notes_polyphonic</code> with <code>predict()</code>'s defaults, melodia trick included, and
-          gives the same notes as the Python code on the test fixtures. Its MIDI files match basic-pitch's notes and
-          velocities.</li>
+          gives the same notes as the Python code on the test fixtures. Its MIDI files match basic-pitch's notes,
+          velocities and pitch bends.</li>
         <li><b>The site works like a map.</b> Whatever is on screen is transcribed first. Each run of windows starts one
           window early so its notes match decoding from the start, the decoder keeps only 100 frames of history, and
           finished results are cached in the browser. On a 10-minute file, jumping around gave exactly the same 1,759
@@ -595,7 +599,6 @@
         <li><b>Lower microphone latency.</b> Mic input works, but notes trail the sound by about one model window
           (2 s). The model runs 50–100× faster than real time, so it could run on overlapping windows every few hundred
           milliseconds and keep only the frames that are already reliable.</li>
-        <li><b>Pitch bends</b> in the MIDI, from the model's contour output.</li>
         <li><b>Safari and Firefox testing.</b></li>
         <li><b>Better model outputs.</b> That's where the remaining errors seem to be, but it means retraining Basic Pitch,
           which was out of scope.</li>

@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import zlib from 'node:zlib';
-import { bendRows, noteBends, dropOverlapping, BINS } from '../src/bends.js';
+import { bendRows, noteBends, bendsFromTiles, dropOverlapping, BINS } from '../src/bends.js';
 import { toMidi } from '../src/midi.js';
 import { frameToTime, N_PITCHES } from '../src/pipeline.js';
 
@@ -58,4 +58,11 @@ test('MIDI pitch-wheel and note events match basic-pitch\'s file', () => {
   }
   assert.equal(ref.ppq, 220);
   assert.deepEqual(got, ref.midi);
+});
+
+test('bends for a note across windows come from the per-window rows the page keeps', () => {
+  const F = 142, tiles = [];
+  for (let w = 0; w * F < T; w++) tiles.push(rows.slice(w * F * N_PITCHES, Math.min(T, (w + 1) * F) * N_PITCHES));
+  for (const [s, e, pitch, bends] of ref.bends) assert.deepEqual([...bendsFromTiles(tiles, F, s, e, pitch)], bends);
+  assert.deepEqual([...bendsFromTiles([tiles[0], null], F, 140, 145, 60)].slice(2), [0, 0, 0], 'missing windows bend by 0');
 });

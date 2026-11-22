@@ -10,6 +10,7 @@
 // clicking it reports it through `onNote` (for a tooltip); clicking empty space asks to seek there.
 import { FRAMES_PER_WINDOW, N_PITCHES, MIDI_OFFSET } from './pipeline.js';
 import { noteAt, soundingAt } from './notes.js';
+import { bendsFromTiles, BINS_PER_SEMITONE } from './bends.js';
 import { followT0, ANCHOR } from './playback.js';
 
 const LO = MIDI_OFFSET, HI = MIDI_OFFSET + N_PITCHES - 1;
@@ -29,7 +30,7 @@ const isBlack = (p) => [1, 3, 6, 8, 10].includes(p % 12);
 export class PianoRoll {
   constructor(canvas, frameToTime, { onView = () => {}, onNote = () => {}, onSeek = () => {}, onSounding = () => {}, onFollow = () => {} } = {}) {
     Object.assign(this, { canvas, frameToTime, onView, onNote, onSeek, onSounding, onFollow, ctx: canvas.getContext('2d') });
-    this.layers = { heat: true, notes: true }; // the model's output before decoding, and the notes
+    this.layers = { heat: true, notes: true, bends: true }; // the model's output before decoding, the notes, their pitch bends
     this.anchor = ANCHOR; // where the followed playhead settles, as a fraction of the view
     this.reset(0, 0);
     new ResizeObserver(() => this.#resize()).observe(canvas);
@@ -43,6 +44,7 @@ export class PianoRoll {
     this.totalFrames = totalFrames;
     this.nWindows = Math.ceil(totalFrames / FRAMES_PER_WINDOW);
     this.tiles = new Array(this.nWindows).fill(null); // byte activations per window
+    this.bendTiles = new Array(this.nWindows).fill(null); // each pitch's bend per frame, per window
     this.canvases = new Map(); // window -> canvas, in LRU order
     this.coarse = new Map(); // group -> canvas
     this.notes = [];
@@ -65,14 +67,27 @@ export class PianoRoll {
     this.totalFrames = totalFrames;
     this.nWindows = Math.ceil(totalFrames / FRAMES_PER_WINDOW);
     while (this.tiles.length < this.nWindows) this.tiles.push(null);
+    while (this.bendTiles.length < this.nWindows) this.bendTiles.push(null);
     this.request();
   }
 
-  // activation: frames x 88 bytes (0-255) for window w.
-  addTile(w, activation) {
+  // activation: frames x 88 bytes (0-255) for window w; bends: frames x 88 pitch bends (1/3 semitones).
+  addTile(w, activation, bends = null) {
     this.tiles[w] = activation;
+    if (bends) this.bendTiles[w] = bends;
     this.coarse.delete(Math.floor(w / GROUP));
     this.request();
+  }
+
+  // Pitch bends for the whole file (missing windows are zeros), and for one note.
+  bends() {
+    const out = new Int8Array(this.totalFrames * N_PITCHES);
+    this.bendTiles.forEach((b, w) => b && out.set(b, w * FRAMES_PER_WINDOW * N_PITCHES));
+    return out;
+  }
+
+  noteBends(n) {
+    return bendsFromTiles(this.bendTiles, FRAMES_PER_WINDOW, n.s, n.e, n.pitch);
   }
 
   // Byte activations for the whole file (missing windows are zeros).
@@ -86,7 +101,7 @@ export class PianoRoll {
   // "final" frames are -1 for notes that are only final once the whole file is in.
   addNotes(notes) {
     const time = this.frameToTime;
-    for (const [s, e, pitch, onWhen] of notes) this.notes.push({ t0: time(s), t1: time(e), pitch, lag: onWhen >= 0 ? time(onWhen + 1) - time(s) : null });
+    for (const [s, e, pitch, onWhen] of notes) this.notes.push({ s, e, t0: time(s), t1: time(e), pitch, lag: onWhen >= 0 ? time(onWhen + 1) - time(s) : null });
     this.request();
   }
 
@@ -444,6 +459,27 @@ export class PianoRoll {
       ctx.fillRect(nx, ny - 1, nw, nh + 2);
     }
     ctx.shadowBlur = 0;
+    // Pitch bends: each note's bend per frame as a line through it (1/3 semitone per bin), with a halo
+    // in the background colour so it reads over the note and the grid alike.
+    if (this.layers.notes && this.layers.bends && row >= 3) {
+      ctx.lineJoin = 'round';
+      for (const n of this.notes) {
+        if (n.t1 < this.t0 || n.t0 > t1) continue;
+        const [nx, ny, nw, nh] = rect(n);
+        if (nw < 6) continue;
+        const b = this.noteBends(n);
+        if (!b.some((v) => v !== 0)) continue;
+        const dx = nw / b.length, mid = ny + nh / 2;
+        ctx.beginPath();
+        b.forEach((v, i) => { const px = nx + (i + 0.5) * dx, py = mid - (v / BINS_PER_SEMITONE) * row; if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py); });
+        ctx.strokeStyle = k.bg;
+        ctx.lineWidth = 3.5;
+        ctx.stroke();
+        ctx.strokeStyle = k.strong;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
     // The hovered and selected notes get an outline.
     ctx.strokeStyle = k.strong;
     ctx.lineWidth = 2;

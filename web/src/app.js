@@ -8,6 +8,7 @@ import { Clock, formatTime, ANCHOR } from './playback.js';
 import { startMic, toWav } from './mic.js';
 import { noteName, noteHz, meanActivation } from './notes.js';
 import { toMidi, velocity } from './midi.js';
+import { bendsFromTiles, BINS_PER_SEMITONE } from './bends.js';
 import { NotePlayer, mix, PRESETS, preset } from './synth.js';
 import { LIVE, ORIGINAL, defaults, isDefault } from './params.js';
 import { createKnob, createSwitch } from './knob.js';
@@ -137,7 +138,7 @@ showPanel(recall('control-panel') === 'open');
 
 // --- Layers: the model's output before decoding (the heat map) and the notes. ---
 
-const layers = { heat: recall('layer-heat') !== 'off', notes: recall('layer-notes') !== 'off' };
+const layers = { heat: recall('layer-heat') !== 'off', notes: recall('layer-notes') !== 'off', bends: recall('layer-bends') !== 'off' };
 roll.setLayers(layers);
 for (const box of document.querySelectorAll('[data-layer]')) {
   box.checked = layers[box.dataset.layer];
@@ -186,7 +187,7 @@ function resetRoll(duration, totalFrames, keepView = false) {
 function showCached(name, hit, keepView = false) {
   resetRoll(hit.duration, hit.totalFrames, keepView);
   const step = FRAMES_PER_WINDOW * N_PITCHES;
-  for (let w = 0; w * FRAMES_PER_WINDOW < hit.totalFrames; w++) roll.addTile(w, hit.activation.subarray(w * step, (w + 1) * step));
+  for (let w = 0; w * FRAMES_PER_WINDOW < hit.totalFrames; w++) roll.addTile(w, hit.activation.subarray(w * step, (w + 1) * step), hit.bends?.subarray(w * step, (w + 1) * step));
   roll.addNotes(hit.notes);
   results = hit.notes;
   synthNotes({ replace: true });
@@ -212,7 +213,7 @@ function applyDecoded(m, { name, duration, totalFrames }) {
   finished = { name, mode: m.mode, notes };
   setStatus(`${name}: ${notes.length} notes`);
   setStats(`${modeLabel(!isDefaultFor(m.mode))} · decoded again in ${m.decodeMs < 1000 ? `${Math.round(m.decodeMs)} ms` : `${(m.decodeMs / 1000).toFixed(1)} s`}, without running the model`);
-  if (isDefaultFor(m.mode)) cache.save({ key: cache.resultKey(current?.hash, m.mode), name, duration, totalFrames, notes, activation: roll.activation() });
+  if (isDefaultFor(m.mode)) cache.save({ key: cache.resultKey(current?.hash, m.mode), name, duration, totalFrames, notes, activation: roll.activation(), bends: roll.bends() });
 }
 
 // blob: the file (a File, or the example fetched as a Blob). keepView: the same file again (from the
@@ -276,7 +277,7 @@ async function open(name, blob, { useCache = isDefaultFor(mode), keepView = fals
       result.runtime = { threads: m.threads, numThreads: m.numThreads, loadMs: m.loadMs };
       setStatus(`Transcribing ${name}…`);
     } else if (m.type === 'progress') {
-      if (m.activation) roll.addTile(m.window, m.activation);
+      if (m.activation) roll.addTile(m.window, m.activation, m.bends);
       result.order.push(m.window);
       // Streamed notes count until the control panel asks for another decoding.
       if (decodeId === 0) {
@@ -309,7 +310,7 @@ async function open(name, blob, { useCache = isDefaultFor(mode), keepView = fals
       setStatus(`${name}: ${result.notes.length} notes`);
       const notesTime = runMode === 'original' ? ` · note creation ${(m.decodeMs / 1000).toFixed(2)} s` : '';
       setStats(`${modeLabel(!cacheable)} · ${runtime} · ${(duration / (m.elapsedMs / 1000)).toFixed(1)}× real time · model ${(m.modelMs / 1000).toFixed(2)} s for ${duration.toFixed(1)} s of audio${notesTime}`);
-      if (cacheable) cache.save({ key, name, duration, totalFrames, notes: result.notes, activation: roll.activation() });
+      if (cacheable) cache.save({ key, name, duration, totalFrames, notes: result.notes, activation: roll.activation(), bends: roll.bends() });
     } else if (m.type === 'error') fail(m.message);
   };
   w.postMessage({ type: 'transcribe', audio: samples, mode: runMode, params: runSettings, view }, [samples.buffer]);
@@ -367,6 +368,7 @@ function synthNotes({ replace = false } = {}) {
   graph.player.setNotes(results.map(([s, e, pitch, , , vel]) => ({
     t0: frameToTime(s), t1: frameToTime(e), pitch,
     velocity: vel ?? velocity(meanActivation(roll.tiles, FRAMES_PER_WINDOW, s, e, pitch)),
+    bends: bendsFromTiles(roll.bendTiles, FRAMES_PER_WINDOW, s, e, pitch),
   })));
 }
 
@@ -569,7 +571,7 @@ async function recordingMessage(m, session, result) {
     session.runtime = `LiteRT.js wasm · ${m.numThreads} thread${m.numThreads === 1 ? '' : 's'}`;
   } else if (m.type === 'progress') {
     roll.grow(Math.max(roll.duration, m.samples / SAMPLE_RATE), m.totalFrames);
-    roll.addTile(m.window, m.activation);
+    roll.addTile(m.window, m.activation, m.bends);
     if (decodeId === 0) {
       roll.addNotes(m.notes);
       result.notes.push(...m.notes);
@@ -602,7 +604,7 @@ async function recordingMessage(m, session, result) {
     // The worker has the whole recording's model output: re-decode for the original decoder, or for
     // live settings changed while recording.
     if (mode !== 'live' || JSON.stringify(settings.live) !== session.liveSettings) decodeAgain();
-    else if (isDefaultFor('live')) cache.save({ key: cache.resultKey(current.hash, 'live'), name, duration, totalFrames: m.totalFrames, notes: result.notes, activation: roll.activation() });
+    else if (isDefaultFor('live')) cache.save({ key: cache.resultKey(current.hash, 'live'), name, duration, totalFrames: m.totalFrames, notes: result.notes, activation: roll.activation(), bends: roll.bends() });
   } else if (m.type === 'decoded') {
     applyDecoded(m, { name: session.name, duration: session.duration, totalFrames: session.totalFrames });
   } else if (m.type === 'error') {
@@ -617,6 +619,16 @@ $('mic').addEventListener('click', () => (mic ? stopRecording() : startRecording
 
 // --- Note tooltip: the hovered note, or the selected one. ---
 
+// "Bends from -33 to +67 cents", from the note's pitch bends (1/3 semitone each).
+function bendLine(n) {
+  const b = roll.noteBends(n);
+  let lo = Infinity, hi = -Infinity;
+  for (const v of b) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  if (!b.length || (!lo && !hi)) return '<div>No pitch bend</div>';
+  const cents = (v) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.round((Math.abs(v) * 100) / BINS_PER_SEMITONE)}`;
+  return `<div>Bends ${lo === hi ? cents(lo) : `${cents(lo)} to ${cents(hi)}`} cents</div>`;
+}
+
 function showTip(r) {
   const tip = $('tip');
   if (!r) { tip.hidden = true; tip.note = null; return; }
@@ -628,6 +640,7 @@ function showTip(r) {
       : `Live: start final ${Math.round(n.lag * 1000)} ms after it began`;
     tip.innerHTML = `<div class="tip-name">${noteName(n.pitch)} <span>MIDI ${n.pitch} · ${noteHz(n.pitch).toFixed(1)} Hz</span></div>`
       + `<div>${formatTime(n.t0, 2)} → ${formatTime(n.t1, 2)} · ${(n.t1 - n.t0).toFixed(2)} s</div>`
+      + bendLine(n)
       + `<div class="tip-lag">${lag}</div>`;
   }
   tip.hidden = false;
@@ -661,10 +674,12 @@ $('example').addEventListener('click', async () => {
 $('again').addEventListener('click', () => current && open(current.name, current.blob, { useCache: false }));
 $('fit').addEventListener('click', () => roll.fit());
 
-// MIDI like basic-pitch's (no pitch bends), named like its <name>_basic_pitch.mid.
+// MIDI like basic-pitch's (pitch bends included, except on notes that overlap another), named like
+// its <name>_basic_pitch.mid.
 $('download').addEventListener('click', () => {
   if (!finished) return;
-  const notes = finished.notes.map(([s, e, pitch, , , vel]) => ({ t0: frameToTime(s), t1: frameToTime(e), pitch, velocity: vel }));
+  const notes = finished.notes.map(([s, e, pitch, , , vel]) => ({ t0: frameToTime(s), t1: frameToTime(e), pitch, velocity: vel,
+    bends: [...bendsFromTiles(roll.bendTiles, FRAMES_PER_WINDOW, s, e, pitch)] }));
   const base = finished.name.replace(/\.[^.]+$/, '');
   const link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob([toMidi(notes)], { type: 'audio/midi' }));

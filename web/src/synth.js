@@ -71,7 +71,19 @@ export class NotePlayer {
     const { ctx } = this, osc = ctx.createOscillator(), gain = ctx.createGain(), peak = voiceGain(n.velocity);
     const stopAt = Math.max(end, start + 0.05);
     osc.type = 'triangle';
-    osc.frequency.value = noteHz(n.pitch);
+    const hz = noteHz(n.pitch);
+    osc.frequency.value = hz;
+    // Pitch bends (1/3 semitone each), one per frame spread over the note, from where the voice starts.
+    const b = n.bends ?? [];
+    if (b.length > 1) {
+      const step = (n.t1 - n.t0) / b.length, from = end - (n.t1 - n.t0);
+      let prev = 0;
+      for (let i = 0; i < b.length; i++) {
+        if (b[i] === prev && i) continue;
+        prev = b[i];
+        osc.frequency.setValueAtTime(hz * 2 ** (b[i] / 36), Math.max(start, from + i * step));
+      }
+    }
     gain.gain.setValueAtTime(0, start);
     gain.gain.linearRampToValueAtTime(peak, start + 0.008);
     gain.gain.setTargetAtTime(peak * 0.55, start + 0.008, 0.25);

@@ -13,6 +13,7 @@ import { LIVE, ORIGINAL, defaults, hmmOptions, originalOptions } from './params.
 import { WindowedDecoder, nextWindow, nextMissing } from './segments.js';
 import { originalNotes } from './original.js';
 import { velocity } from './midi.js';
+import { BINS, bendRows } from './bends.js';
 
 const WASM_DIR = new URL('wasm/', self.location.href).href;
 let loaded;
@@ -102,15 +103,16 @@ async function transcribe(audio, mode, params = {}) {
       whole.note.set(note, start * N_PITCHES);
       whole.onset.set(onset, start * N_PITCHES);
       const notes = live ? dec.add(w, note, onset) : [];
-      let activation = null;
+      let activation = null, bends = null;
       if (!posted[w]) {
         posted[w] = 1;
         done++;
         activation = Uint8Array.from(note, toByte);
+        bends = bendRows(windowFrames(out.contour, BINS), k); // each pitch's bend at each frame
       }
       self.postMessage(
-        { type: 'progress', window: w, windows: nWin, done, start, frames: k, totalFrames, activation, notes, runs, modelMs, elapsedMs: performance.now() - t1 },
-        activation ? [activation.buffer] : [],
+        { type: 'progress', window: w, windows: nWin, done, start, frames: k, totalFrames, activation, bends, notes, runs, modelMs, elapsedMs: performance.now() - t1 },
+        activation ? [activation.buffer, bends.buffer] : [],
       );
     }
     const a = performance.now();
@@ -181,9 +183,9 @@ async function pump() {
       for (let t = 0; t < k; t++) s.hmm.push(note.subarray(t * N_PITCHES, (t + 1) * N_PITCHES), onset.subarray(t * N_PITCHES, (t + 1) * N_PITCHES));
       s.frames = start + k;
       s.next++;
-      const activation = Uint8Array.from(note, toByte);
-      self.postMessage({ type: 'progress', window: w, windows: s.next, done: s.next, start, frames: k, totalFrames: s.frames, samples: s.len, activation, notes: s.hmm.drain(),
-        runs: s.next, modelMs: s.modelMs, elapsedMs: performance.now() - s.t1 }, [activation.buffer]);
+      const activation = Uint8Array.from(note, toByte), bends = bendRows(windowFrames(out.contour, BINS), k);
+      self.postMessage({ type: 'progress', window: w, windows: s.next, done: s.next, start, frames: k, totalFrames: s.frames, samples: s.len, activation, bends, notes: s.hmm.drain(),
+        runs: s.next, modelMs: s.modelMs, elapsedMs: performance.now() - s.t1 }, [activation.buffer, bends.buffer]);
     }
     if (s.stopping && !s.finished) {
       s.finished = true;
