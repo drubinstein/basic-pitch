@@ -433,8 +433,8 @@
 
   <section id="panel-report" class="panel doc" aria-label="Report" hidden>
     <article>
-      <h2>Streaming Basic Pitch: what we tried, and why</h2>
-      <p class="lede">How we got notes out of Basic Pitch while the audio comes in, what the numbers said, and why the
+      <h2>Streaming Basic Pitch</h2>
+      <p class="lede">How to get notes out of Basic Pitch while the audio comes in, what the numbers said, and why the
         site works the way it does. November 2026.</p>
 
       <h3>The problem</h3>
@@ -443,7 +443,7 @@
         trick</a> repeatedly takes the strongest leftover activation anywhere in the file. So notes only exist once the
         whole file is in. The goal was notes as the audio arrives, without retraining Basic Pitch.</p>
 
-      <h3 id="options">The options we compared</h3>
+      <h3 id="options">The options</h3>
       <p>All of them read the same Basic Pitch outputs; only the step that turns those into notes differs. The names
         match the charts and tables below.</p>
       <ul>
@@ -460,7 +460,7 @@
       </ul>
 
       <h3 id="hmm">From a traceback length to an HMM</h3>
-      <p>We started by treating note creation like a Viterbi decoder with a fixed traceback length, the way streaming
+      <p>The starting idea was to treat note creation like a Viterbi decoder with a fixed traceback length, the way streaming
         decoders for error-correcting codes work: keep the best explanation of the audio so far for every possible
         current state, and once the explanations agree about a frame, or after a fixed delay at the latest, commit to it.
         A short look through the literature showed that this generalizes to a hidden Markov model decoded with the
@@ -505,7 +505,7 @@
         final. That is the decoder lag shown in the note tooltips. If they haven't joined after 100 frames (1.16 s), the
         decoder commits to the best path anyway. That cap is the original traceback length.</p>
 
-      <h3>How we tuned them</h3>
+      <h3>Tuning</h3>
       <ul>
         <li><b>A fair baseline.</b> The original note creation was tuned too (per dataset, on the dev halves). Tuned, it
           gains a lot: onset threshold 0.625, frame threshold 0.3, minimum length 7, energy tolerance 4, and the melodia
@@ -521,8 +521,8 @@
       <p>Test halves of GuitarSet (guitar), MAESTRO (piano) and vocadito (singing). F is mir_eval's note F-measure with
         offsets; Fno ignores offsets. A decoder “beats” the tuned original on a track when it scores strictly higher.
         The onset delay is the median time from a note's start until the decoder has committed to it.</p>
-      <p>We didn't test on <a href="https://zenodo.org/records/4599666">Slakh2100</a> (multi-instrument mixes rendered
-        from MIDI): it comes as a single 104 GB archive, too big to download and unpack for this round.</p>
+      <p><a href="https://zenodo.org/records/4599666">Slakh2100</a> (multi-instrument mixes rendered from MIDI) isn't
+        included: it comes as a single 104 GB archive, too big to download and unpack for this round.</p>
 
       <div class="chart-card">
         <h4>Share of test tracks where each decoder beats the tuned original</h4>
@@ -541,8 +541,8 @@
         <div id="chart-tracks"></div>
       </div>
 
-      <p>Then we redid the vocadito sweep with the share of tracks won as the objective, against a re-tuned original,
-        and ran the ceiling check: the same sweep, tuned and scored on the test tracks themselves.</p>
+      <p>The vocadito sweep was then redone with the share of tracks won as the objective, against a re-tuned original,
+        along with a ceiling check: the same sweep, tuned and scored on the test tracks themselves.</p>
       <div class="scroll">
         <table class="results">
           <thead><tr><th scope="col">Streaming HMM, scored on the 20 vocadito test tracks</th><th scope="col">Fno<br>(onsets)</th><th scope="col">F<br>(with offsets)</th><th scope="col">Tracks beaten<br>on Fno</th><th scope="col">Tracks beaten<br>on F</th><th scope="col">Onset delay<br>(median)</th></tr></thead>
@@ -557,7 +557,7 @@
       </div>
 
       <div class="chart-card">
-        <h4>Every HMM setting we tried on vocadito</h4>
+        <h4>Every HMM setting tried on vocadito</h4>
         <p class="sub">686 settings from the two sweeps. More delay barely helps past about 50 ms. Scored on the test
           tracks, no setting reaches 95%, not even ones tuned on those tracks. Hover a dot for its scores.</p>
         <div id="chart-sweep"></div>
@@ -568,20 +568,20 @@
         are doing: the octave above, the rest of a chord, harmonics, or a string that's still ringing when it's struck
         again. A small recurrent network reading all 88 pitches' note and onset activations can, and a few frames of
         look-ahead (a fixed delay, like the traceback length) lets it see a note's attack before committing.</p>
-      <p><b>What we built.</b> Per-pitch convolutions plus a 128-unit GRU across pitches, trained on a held-out split of
+      <p><b>The model.</b> Per-pitch convolutions plus a 128-unit GRU across pitches, trained on a held-out split of
         GuitarSet, MAESTRO and vocadito for about 30 minutes on a CPU, with 0, 4 or 8 frames (0, 46 or 93 ms) of
         look-ahead, then its decoding thresholds tuned on held-out tracks.</p>
       <p><b>What happened.</b> It lost to the tuned original on most tracks. With 4 frames of look-ahead it beat it on
         46% of GuitarSet tracks (Fno) but on 9% of MAESTRO and 1 of 20 vocadito tracks (vocadito Fno .475 against .559).
         No look-ahead and 8 frames did worse. Half an hour on a CPU is far too little training for a model like this.</p>
-      <p><b>Why we stopped there.</b> The ceiling check says even an HMM tuned on the very tracks it's scored on beats
+      <p><b>Why it was shelved.</b> The ceiling check says even an HMM tuned on the very tracks it's scored on beats
         the tuned original on only 80% (Fno) and 85% (F) of vocadito tracks. A learned decoder could only do better by
-        fixing errors the HMM structurally can't, the cross-pitch ones, and we don't yet know that those make up most of
-        what's left. Different decoders reading the same model outputs land at about the same score, which points at the
+        fixing errors the HMM structurally can't, the cross-pitch ones, and there's no evidence yet that those make up
+        most of what's left. Different decoders reading the same model outputs land at about the same score, which points at the
         model's outputs rather than the decoding. A real attempt needs a GPU run of hours, more held-out labelled audio
         (for example Slakh2100's test split), a training loss closer to note-level F, and the same track-by-track check.</p>
 
-      <h3>Why we went with what we did</h3>
+      <h3>What the site uses, and why</h3>
       <ul>
         <li><b>The streaming HMM is the Live mode.</b> It makes notes while the audio comes in, typically within a few
           frames of their start. It is far better than the original's defaults and close to the tuned original: ahead on
@@ -619,7 +619,7 @@
       <ul>
         <li><a href="https://basicpitch.spotify.com/">Spotify's original Basic Pitch demo</a></li>
         <li>The paper: <a href="https://arxiv.org/abs/2203.09893">A Lightweight Instrument-Agnostic Model for Polyphonic Note Transcription and Multipitch Estimation</a> (ICASSP 2022)</li>
-        <li><a href="#report">The report</a>: what we tried for streaming, and why the site works this way</li>
+        <li><a href="#report">The report</a>: what was tried for streaming, and why the site works this way</li>
         <li><a href="https://github.com/drubinstein/basic-pitch/tree/main/web">Source for this site</a></li>
       </ul>
       <p class="note">The example is track 10 of the vocadito dataset of solo singing.</p>

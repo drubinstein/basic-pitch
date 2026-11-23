@@ -25,7 +25,7 @@ streams the microphone to the worker, which runs each model window as soon as it
 sound by about one window (`src/mic.js`). Pitch bends come from the model's contour output as in basic-pitch (`src/bends.js`): drawn
 through each note, played by the synth, and written to the MIDI file. Notes download as MIDI written like
 basic-pitch's (`src/midi.js`). The
-How to use, Report and About tabs explain the controls, what we tried and why (with charts from
+How to use, Report and About tabs explain the controls, what was tried and why (with charts from
 `src/report-data.json`), and credits.
 
 ```
