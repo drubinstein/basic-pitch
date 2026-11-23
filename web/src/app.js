@@ -442,6 +442,9 @@ const paused = () => {
 };
 audio.addEventListener('pause', paused);
 audio.addEventListener('ended', paused);
+// A new source (another file, or the microphone taking over) resets the element, which drops the
+// 'pause' event that pause() queued and fires 'emptied' instead.
+audio.addEventListener('emptied', paused);
 audio.addEventListener('seeking', () => { clock.reset(); graph?.player.reset(); });
 audio.addEventListener('error', () => {
   if (!audio.getAttribute('src')) return;
