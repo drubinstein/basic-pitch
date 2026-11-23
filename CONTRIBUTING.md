@@ -15,9 +15,9 @@ We recommend first installing the following non-python dependencies:
 - [ffmpeg](https://ffmpeg.org/) is a complete, cross-platform solution to record, convert and stream audio in all `basic-pitch` supported formats
 - [sox](https://sourceforge.net/projects/sox/) is a general purpose sound processing utility library used to process and transform training data used for training the `basic-pitch` model. 
 
-To compile a debug build of `basic-pitch` that allows using a debugger (like gdb or lldb), use the following command to build the package locally and install a symbolic link for debugging:
+To work on `basic-pitch` locally, install it in editable mode, so changes to the source take effect without reinstalling:
 ```shell
-python3 setup.py build develop
+pip install -e .
 ```
 
 Then, you can `import basic_pitch` from Python (or run the tests with `tox`) to test out your local changes.

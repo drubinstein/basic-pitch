@@ -87,6 +87,7 @@ requires = [
 	"wheel",
 	"cython",
 ]
+build-backend = "setuptools.build_meta"
 
 [tool.ruff]
 line-length = 120
