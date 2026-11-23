@@ -574,12 +574,9 @@
       <p><b>What happened.</b> It lost to the tuned original on most tracks. With 4 frames of look-ahead it beat it on
         46% of GuitarSet tracks (Fno) but on 9% of MAESTRO and 1 of 20 vocadito tracks (vocadito Fno .475 against .559).
         No look-ahead and 8 frames did worse. Half an hour on a CPU is far too little training for a model like this.</p>
-      <p><b>Why it was shelved.</b> The ceiling check says even an HMM tuned on the very tracks it's scored on beats
-        the tuned original on only 80% (Fno) and 85% (F) of vocadito tracks. A learned decoder could only do better by
-        fixing errors the HMM structurally can't, the cross-pitch ones, and there's no evidence yet that those make up
-        most of what's left. Different decoders reading the same model outputs land at about the same score, which points at the
-        model's outputs rather than the decoding. A real attempt needs a GPU run of hours, more held-out labelled audio
-        (for example Slakh2100's test split), a training loss closer to note-level F, and the same track-by-track check.</p>
+      <p><b>Why it was shelved.</b> After the initial prototype, it was clear that a larger research endeavor including
+        more held-out labelled audio (for example Slakh2100's test split), model research and many GPU hours would be
+        required.</p>
 
       <h3>What the site uses, and why</h3>
       <ul>
