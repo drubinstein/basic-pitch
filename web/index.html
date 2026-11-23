@@ -594,11 +594,6 @@
           <code>output_to_notes_polyphonic</code> with <code>predict()</code>'s defaults, melodia trick included, and
           gives the same notes as the Python code on the test fixtures. Its MIDI files match basic-pitch's notes,
           velocities and pitch bends.</li>
-        <li><b>The site works like a map.</b> Whatever is on screen is transcribed first. Each run of windows starts one
-          window early so its notes match decoding from the start, the decoder keeps only 100 frames of history, and
-          finished results are cached in the browser. On a 10-minute file, jumping around gave exactly the same 1,759
-          notes as going front to back, at about 97× real time on 4 threads (Chrome on a 2023 15-inch MacBook Air:
-          Apple M2 with 4 performance and 4 efficiency cores, 24 GB of memory).</li>
       </ul>
 
       <h3>References</h3>
