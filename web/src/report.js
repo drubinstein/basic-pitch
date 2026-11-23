@@ -87,9 +87,13 @@ function yAxis(svg, ticks, x0, x1, top, bottom, format) {
 }
 
 // A marked horizontal line with a label at the right end (a target or a baseline).
+// The label gets a backing so it stays readable over dense marks.
 function refLine(svg, y, x0, x1, text) {
   el('line', { x1: x0, x2: x1, y1: y, y2: y, class: 'ref' }, svg);
-  el('text', { x: x1, y: y - 5, 'text-anchor': 'end', class: 'ref-label' }, svg).textContent = text;
+  const label = el('text', { x: x1, y: y - 5, 'text-anchor': 'end', class: 'ref-label' }, svg);
+  label.textContent = text;
+  const b = label.getBBox();
+  svg.insertBefore(el('rect', { x: b.x - 4, y: b.y - 1, width: b.width + 8, height: b.height + 2, rx: 4, class: 'label-bg' }), label);
 }
 
 function table(parent, summary, head, rows) {
@@ -109,17 +113,19 @@ function beatsChart(root) {
   toggles(controls, 'Score', [['Fno', 'Fno (onsets)'], ['F', 'F (with offsets)']], metric, (m) => { metric = m; chart.render(); });
   legend(root, ORDER.map((k) => [SERIES[k], NAME[k]]));
   const chart = frame(root, 300, () => `Bar chart: share of test tracks each decoder beats the tuned original on, by ${metric}, per dataset. The table below has the numbers.`, (svg, W, H, show) => {
-    const L = 40, R = 8, T = 16, B = H - 28, y = yAxis(svg, [0, 0.25, 0.5, 0.75, 1], L, W - R, T, B, pct);
+    const L = 40, R = 8, T = 16, B = H - 42, y = yAxis(svg, [0, 0.25, 0.5, 0.75, 1], L, W - R, T, B, pct);
     const groups = data.datasets, gw = (W - L - R) / groups.length;
     const bw = Math.min(24, (gw * 0.7) / ORDER.length - 2);
     groups.forEach((ds, gi) => {
       const cx = L + gw * (gi + 0.5), x0 = cx - (ORDER.length * (bw + 2) - 2) / 2;
-      el('text', { x: cx, y: H - 8, 'text-anchor': 'middle', class: 'tick' }, svg).textContent = `${ds.name} (${ds.n} tracks)`;
+      el('text', { x: cx, y: B + 18, 'text-anchor': 'middle', class: 'tick' }, svg).textContent = ds.name;
+      el('text', { x: cx, y: B + 33, 'text-anchor': 'middle', class: 'tick' }, svg).textContent = `${ds.n} tracks`;
       ORDER.forEach((k, i) => {
         const s = data.summary[ds.key][k], v = s[`beat${metric}`], x = x0 + i * (bw + 2), top = y(v);
         const h = Math.max(0, B - top), r = Math.min(4, h / 2, bw / 2);
         const bar = el('path', { d: `M${x},${B}V${top + r}q0,${-r} ${r},${-r}h${bw - 2 * r}q${r},0 ${r},${r}V${B}Z`, fill: SERIES[k], class: 'mark', tabindex: 0 }, svg);
-        if (k === 'hmm_current') el('text', { x: x + bw / 2, y: top - 5, 'text-anchor': 'middle', class: 'value' }, svg).textContent = pct(v);
+        // The first bar of each group: its label can run left into the gap instead of over the next bar.
+        if (k === 'hmm_current') el('text', { x: x + bw, y: top - 5, 'text-anchor': 'end', class: 'value' }, svg).textContent = pct(v);
         const lines = () => [pct(v), `${NAME[k]} · ${ds.name}`, `${metric} ${f3(s[metric])} vs ${f3(data.summary[ds.key].bar[metric])} for the tuned original`,
           s.delayMs === null ? 'needs the whole file' : `onset delay ${s.delayMs} ms (median)`];
         const hit = el('rect', { x: x - 1, y: T, width: bw + 2, height: B - T, class: 'hit' }, svg);
@@ -162,14 +168,14 @@ function tracksChart(root) {
       el('rect', { x, y: Math.min(y0, y1), width: bw, height: Math.max(1, Math.abs(y1 - y0)), fill: g.gap > 0 ? 'var(--div-pos)' : g.gap < 0 ? 'var(--div-neg)' : 'var(--chart-axis)', class: 'mark' }, svg);
     });
     const hit = el('rect', { x: L, y: T, width: W - L - R, height: B - T, class: 'hit' }, svg);
-    const cursor = el('rect', { y: T, height: B - T, class: 'cursor', width: Math.max(2, bw), x: -10 }, svg);
+    const cursor = el('rect', { y: T, height: B - T, class: 'cursor', width: Math.max(2, bw), x: L, visibility: 'hidden' }, svg);
     hit.addEventListener('pointermove', (e) => {
       const i = Math.min(gaps.length - 1, Math.max(0, Math.floor((e.offsetX - L) / step)));
-      if (i !== active) { active = i; cursor.setAttribute('x', L + i * step); }
+      if (i !== active) { active = i; cursor.setAttribute('x', L + i * step); cursor.setAttribute('visibility', 'visible'); }
       const g = gaps[i];
       show(e.offsetX, e.offsetY, [`${g.gap >= 0 ? '+' : ''}${g.gap.toFixed(3)}`, g.name, `${NAME[dec]} ${f3(g.value)} · tuned original ${f3(g.bar)}`]);
     });
-    hit.addEventListener('pointerleave', () => { active = null; cursor.setAttribute('x', -10); show(); });
+    hit.addEventListener('pointerleave', () => { active = null; cursor.setAttribute('visibility', 'hidden'); show(); });
   });
   const tableBox = html('div', {}, root);
   function update() {
@@ -212,17 +218,17 @@ function sweepChart(root) {
       const v = data.sweeps[k].baseline[metric];
       if (v >= yt[0]) refLine(svg, y(v), L, W - R, `tuned original on ${n}: ${f3(v)}`);
     }
-    const ring = el('circle', { r: 6, class: 'ring', cx: -20, cy: -20 }, svg);
+    const ring = el('circle', { r: 6, class: 'ring', cx: L, cy: T, visibility: 'hidden' }, svg);
     const hit = el('rect', { x: L, y: T, width: W - L - R, height: B - T, class: 'hit' }, svg);
     hit.addEventListener('pointermove', (e) => {
       let best = null, bd = 24 * 24;
       for (const p of visible) { const d = (p.x - e.offsetX) ** 2 + (p.y - e.offsetY) ** 2; if (d < bd) { bd = d; best = p; } }
-      if (!best) { ring.setAttribute('cx', -20); return show(); }
-      ring.setAttribute('cx', best.x); ring.setAttribute('cy', best.y);
+      if (!best) { ring.setAttribute('visibility', 'hidden'); return show(); }
+      ring.setAttribute('cx', best.x); ring.setAttribute('cy', best.y); ring.setAttribute('visibility', 'visible');
       const [ms, fno, f, bfno, bf] = best.t;
       show(best.x, best.y, [fmt(best.t[c]), SWEEPS.find(([k]) => k === best.k)[1], `onset delay ${Math.round(ms)} ms · Fno ${f3(fno)} · F ${f3(f)}`, `beats the tuned original on ${pct(bfno)} (Fno) / ${pct(bf)} (F) of tracks`]);
     });
-    hit.addEventListener('pointerleave', () => { ring.setAttribute('cx', -20); show(); });
+    hit.addEventListener('pointerleave', () => { ring.setAttribute('visibility', 'hidden'); show(); });
   });
   const below = html('p', { class: 'note' }, root);
   const tableBox = html('div', {}, root);

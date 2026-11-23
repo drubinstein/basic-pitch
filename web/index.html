@@ -56,7 +56,7 @@
     button, .file { font: inherit; font-size: 14px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
     button:hover { border-color: var(--accent); }
     button:disabled { opacity: 0.5; cursor: default; }
-    svg { width: 20px; height: 20px; flex: none; }
+    button svg, .search svg { width: 20px; height: 20px; flex: none; } /* icons; charts and diagrams size themselves */
     .float { position: absolute; z-index: 3; }
     .float, .float button, .float .modes, .float .chip { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18), 0 1px 8px rgba(0, 0, 0, 0.06); }
     .float button, .float .chip { border: 0; }
@@ -245,6 +245,8 @@
     .chart .value { fill: var(--text); font: 600 12px system-ui, sans-serif; }
     .chart .ref { stroke: var(--text); stroke-width: 1; opacity: 0.55; }
     .chart .ref-label { fill: var(--text-muted); font: 11.5px system-ui, sans-serif; }
+    .chart .label-bg { fill: var(--surface); opacity: 0.9; }
+    .chart .value, .diagram .edge-label { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
     .chart .hit { fill: transparent; }
     .chart .mark.on { filter: brightness(1.15); stroke: var(--text); stroke-width: 1; }
     .chart .mark:focus { outline: none; stroke: var(--text); stroke-width: 1.5; }
@@ -441,7 +443,23 @@
         trick</a> repeatedly takes the strongest leftover activation anywhere in the file. So notes only exist once the
         whole file is in. The goal was notes as the audio arrives, without retraining Basic Pitch.</p>
 
-      <h3>From a traceback length to an HMM</h3>
+      <h3 id="options">The options we compared</h3>
+      <p>All of them read the same Basic Pitch outputs; only the step that turns those into notes differs. The names
+        match the charts and tables below.</p>
+      <ul>
+        <li><b>Original, default.</b> Basic Pitch's own note creation with <code>predict()</code>'s defaults, melodia
+          trick on. Needs the whole file. This is the site's Original mode.</li>
+        <li><b>Original, tuned (the bar).</b> The same code with its thresholds tuned on each dataset's dev half. Needs
+          the whole file. Every other option is scored against it, track by track.</li>
+        <li><b>Live: streaming HMM.</b> A hidden Markov model for each pitch, decoded as the audio comes in, with its
+          starting parameters. This is the site's Live mode, explained <a href="#hmm">below</a>.</li>
+        <li><b>HMM tuned per dataset.</b> The same decoder with its parameters tuned on each dataset's dev half, which
+          adds about 100 ms of delay.</li>
+        <li><b>Learned decoder.</b> A small recurrent network (an RNN) that reads all 88 pitches at once, with 4 frames
+          (46 ms) of look-ahead. Details <a href="#rnn">further down</a>.</li>
+      </ul>
+
+      <h3 id="hmm">From a traceback length to an HMM</h3>
       <p>We started by treating note creation like a Viterbi decoder with a fixed traceback length, the way streaming
         decoders for error-correcting codes work: keep the best explanation of the audio so far for every possible
         current state, and once the explanations agree about a frame, or after a fixed delay at the latest, commit to it.
@@ -474,9 +492,9 @@
           <path class="edge" d="M360,80H408" marker-end="url(#arrow)"/>
           <path class="edge" d="M490,74H543" marker-end="url(#arrow)"/><path class="edge" d="M545,88H492" marker-end="url(#arrow)"/>
           <text class="edge-label" x="517" y="68" text-anchor="middle">dip</text><text class="edge-label" x="517" y="102" text-anchor="middle">back</text>
-          <path class="edge" d="M440,62C400,8 210,8 172,60" marker-end="url(#arrow)"/><text class="edge-label" x="305" y="24" text-anchor="middle">re-strike: a new note at the same pitch</text>
+          <path class="edge" d="M440,62C400,8 210,8 172,60" marker-end="url(#arrow)"/><text class="edge-label" x="305" y="13" text-anchor="middle">re-strike: a new note at the same pitch</text>
           <path class="edge" d="M450,98C420,160 80,160 50,100" marker-end="url(#arrow)"/>
-          <path class="edge" d="M585,98C560,168 90,166 58,100" marker-end="url(#arrow)"/><text class="edge-label" x="320" y="152" text-anchor="middle">note ends</text>
+          <path class="edge" d="M585,98C560,168 90,166 58,100" marker-end="url(#arrow)"/><text class="edge-label" x="320" y="166" text-anchor="middle">note ends</text>
         </svg>
         <figcaption>One pitch's states. Green states are “note on”. Each state can also stay where it is for another frame.</figcaption>
       </figure>
@@ -487,7 +505,7 @@
         final. That is the decoder lag shown in the note tooltips. If they haven't joined after 100 frames (1.16 s), the
         decoder commits to the best path anyway. That cap is the original traceback length.</p>
 
-      <h3>What we tried</h3>
+      <h3>How we tuned them</h3>
       <ul>
         <li><b>A fair baseline.</b> The original note creation was tuned too (per dataset, on the dev halves). Tuned, it
           gains a lot: onset threshold 0.625, frame threshold 0.3, minimum length 7, energy tolerance 4, and the melodia
@@ -495,7 +513,6 @@
         <li><b>Tuning the HMM.</b> Hill climbing gave all the gains. A PufferLib Protein sweep with latency as the cost
           never beat the starting parameters at the same latency. Per-register parameters didn't carry over from dev to
           test, and stronger re-strike handling made things worse.</li>
-        <li><b>A learned decoder</b> (an RNN, <a href="#rnn">below</a>).</li>
         <li><b>A ceiling check.</b> The HMM tuned directly on the vocadito test tracks, to see how good any HMM tuning
           could get.</li>
       </ul>
@@ -505,8 +522,7 @@
         offsets; Fno ignores offsets. A decoder “beats” the tuned original on a track when it scores strictly higher.
         The onset delay is the median time from a note's start until the decoder has committed to it.</p>
       <p>We didn't test on <a href="https://zenodo.org/records/4599666">Slakh2100</a> (multi-instrument mixes rendered
-        from MIDI): it comes as a single 104 GB archive, too big to download and unpack for this round. It's in future
-        work.</p>
+        from MIDI): it comes as a single 104 GB archive, too big to download and unpack for this round.</p>
 
       <div class="chart-card">
         <h4>Share of test tracks where each decoder beats the tuned original</h4>
@@ -515,8 +531,8 @@
       </div>
 
       <h4 class="table-title">All results, by dataset</h4>
-      <p class="note">Mean scores over each dataset's test tracks. “Tracks beaten” compares each track's score with the
-        tuned original's on the same track.</p>
+      <p class="note">Mean scores over each dataset's test tracks. “Tracks beaten” is the share of test tracks on which the
+        decoder scored higher than the tuned original did on that same track; a tie doesn't count.</p>
       <div id="results-table"></div>
 
       <div class="chart-card">
@@ -581,27 +597,8 @@
         <li><b>The site works like a map.</b> Whatever is on screen is transcribed first. Each run of windows starts one
           window early so its notes match decoding from the start, the decoder keeps only 100 frames of history, and
           finished results are cached in the browser. On a 10-minute file, jumping around gave exactly the same 1,759
-          notes as going front to back, at about 97× real time on 4 threads.</li>
-      </ul>
-
-      <h3>Future work</h3>
-      <ul>
-        <li><b>Train the learned decoder properly</b>: on a GPU, with more held-out labelled audio, judged by the same
-          track-by-track check. It's the one option here that can fix cross-pitch errors.</li>
-        <li><b>One tuned HMM parameter set</b> that works across instruments, instead of one per dataset.</li>
-        <li><b>Ceiling checks on GuitarSet and MAESTRO</b> (each guitar trial takes 20–120 s).</li>
-        <li><b>Slakh2100</b>, for multi-instrument music: stream only the test mixes and their MIDI out of the 104 GB
-          archive instead of downloading all of it.</li>
-        <li><b>Color-coded instrument tracks.</b> Basic Pitch doesn't know which instrument played a note. Separating the
-          audio into stems first (for example with <a href="https://arxiv.org/abs/2211.08553">Hybrid Transformer Demucs</a>:
-          vocals, bass, drums, other) and transcribing each would give one color per track, at the cost of a much larger
-          download and several times the compute.</li>
-        <li><b>Lower microphone latency.</b> Mic input works, but notes trail the sound by about one model window
-          (2 s). The model runs 50–100× faster than real time, so it could run on overlapping windows every few hundred
-          milliseconds and keep only the frames that are already reliable.</li>
-        <li><b>Safari and Firefox testing.</b></li>
-        <li><b>Better model outputs.</b> That's where the remaining errors seem to be, but it means retraining Basic Pitch,
-          which was out of scope.</li>
+          notes as going front to back, at about 97× real time on 4 threads (Chrome on a 2023 15-inch MacBook Air:
+          Apple M2 with 4 performance and 4 efficiency cores, 24 GB of memory).</li>
       </ul>
 
       <h3>References</h3>
