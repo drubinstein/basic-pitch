@@ -8,16 +8,19 @@
 // During playback a playhead crosses the roll, the notes under it and their keys on the keyboard
 // light up, and the view follows the playhead until the user pans away. Hovering a note or
 // clicking it reports it through `onNote` (for a tooltip); clicking empty space asks to seek there.
+// Once there's audio (`seekable`), the time axis is a seek bar: press or drag on it to seek through
+// `onSeek`; the view holds still while dragging, even when it's following the playhead.
 import { FRAMES_PER_WINDOW, N_PITCHES, MIDI_OFFSET } from './pipeline.js';
 import { noteAt, soundingAt } from './notes.js';
 import { bendsFromTiles, BINS_PER_SEMITONE } from './bends.js';
-import { followT0, ANCHOR } from './playback.js';
+import { followT0, formatTime, ANCHOR } from './playback.js';
+import { axisTime } from './scrub.js';
 
 const LO = MIDI_OFFSET, HI = MIDI_OFFSET + N_PITCHES - 1;
 const MAX_PPS = 4000; // pixels per second at full zoom
-const GUTTER = 40; // left gutter: the keyboard
+export const GUTTER = 40; // left gutter: the keyboard
 const BLACK_KEY = 24; // width of a black key in the keyboard
-const AXIS = 22; // bottom axis height
+export const AXIS = 30; // bottom axis height: the time labels and the seek bar
 const STEPS = [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
 const LRU = 384; // window canvases kept
 const GROUP = 8; // windows per coarse tile
@@ -32,6 +35,7 @@ export class PianoRoll {
     Object.assign(this, { canvas, frameToTime, onView, onNote, onSeek, onSounding, onFollow, ctx: canvas.getContext('2d') });
     this.layers = { heat: true, notes: true, bends: true }; // the model's output before decoding, the notes, their pitch bends
     this.anchor = ANCHOR; // where the followed playhead settles, as a fraction of the view
+    this.seekable = false; // whether the time axis seeks (there's audio, and it isn't the microphone)
     this.reset(0, 0);
     new ResizeObserver(() => this.#resize()).observe(canvas);
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.#readColors());
@@ -55,6 +59,7 @@ export class PianoRoll {
     if (this.following) this.onFollow(false);
     this.following = false;
     this.hover = null;
+    this.axisHover = null; // x of the pointer over the seek bar
     this.selected = null;
     this.sounding = [];
     this.shown = ''; // forces the next draw to report "no note" if a tooltip was up
@@ -159,6 +164,11 @@ export class PianoRoll {
     this.pps = Math.min(MAX_PPS, w / Math.max(this.duration, 1));
     this.t0 = 0;
     this.request();
+  }
+
+  // What's on screen: the start time and how many seconds the view spans.
+  view() {
+    return { t0: this.t0, span: this.pps === null ? 0 : this.#plotWidth() / this.pps };
   }
 
   request() {
@@ -276,6 +286,21 @@ export class PianoRoll {
     this.request();
   }
 
+  #onAxis(x, y) {
+    return this.seekable && this.pps !== null && this.duration > 0 && x >= GUTTER && y >= this.#plotHeight();
+  }
+
+  #setAxisHover(x) {
+    if (x === this.axisHover) return;
+    this.axisHover = x;
+    this.request();
+  }
+
+  #scrubTo(x) {
+    this.#setAxisHover(x);
+    this.onSeek(axisTime(x, { t0: this.t0, pps: this.pps, left: GUTTER, right: this.canvas.clientWidth, duration: this.duration }));
+  }
+
   #click(x, y) {
     const note = this.#noteAt(x, y);
     if (note) return this.select(note === this.selected ? null : note);
@@ -285,7 +310,7 @@ export class PianoRoll {
 
   #bind() {
     const c = this.canvas, pointers = new Map();
-    let pinch = null, press = null;
+    let pinch = null, press = null, scrub = null;
     c.addEventListener('wheel', (e) => {
       e.preventDefault();
       const x = e.offsetX;
@@ -296,12 +321,28 @@ export class PianoRoll {
     }, { passive: false });
     c.addEventListener('pointerdown', (e) => {
       c.setPointerCapture(e.pointerId);
+      // On the seek bar: seek, and keep the view still until the pointer lets go.
+      if (!scrub && pointers.size === 0 && this.#onAxis(e.offsetX, e.offsetY)) {
+        scrub = { id: e.pointerId, following: this.following };
+        this.following = false;
+        this.#setHover(null);
+        c.style.cursor = 'pointer';
+        this.#scrubTo(e.offsetX);
+        return;
+      }
       pointers.set(e.pointerId, e.offsetX);
       press = pointers.size === 1 ? { x: e.offsetX, y: e.offsetY, dragging: false } : null;
       if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = { d: Math.abs(a - b) || 1 }; }
     });
     c.addEventListener('pointermove', (e) => {
-      if (!pointers.has(e.pointerId)) return this.#setHover(this.#noteAt(e.offsetX, e.offsetY), e.offsetX);
+      if (scrub?.id === e.pointerId) return this.#scrubTo(e.offsetX);
+      if (!pointers.has(e.pointerId)) {
+        const axis = this.#onAxis(e.offsetX, e.offsetY);
+        this.#setAxisHover(axis ? e.offsetX : null);
+        this.#setHover(axis ? null : this.#noteAt(e.offsetX, e.offsetY), e.offsetX);
+        if (axis) c.style.cursor = 'pointer';
+        return;
+      }
       const prev = pointers.get(e.pointerId);
       if (pointers.size === 1) {
         // Small movements still count as a click; past that, drag the view.
@@ -318,6 +359,12 @@ export class PianoRoll {
       }
     });
     const up = (e) => {
+      if (scrub?.id === e.pointerId) {
+        this.following = scrub.following;
+        scrub = null;
+        if (!this.#onAxis(e.offsetX, e.offsetY)) this.#setAxisHover(null);
+        return;
+      }
       if (e.type === 'pointerup' && press && !press.dragging && pointers.size === 1) this.#click(e.offsetX, e.offsetY);
       pointers.delete(e.pointerId);
       press = null;
@@ -325,8 +372,11 @@ export class PianoRoll {
     };
     c.addEventListener('pointerup', up);
     c.addEventListener('pointercancel', up);
-    c.addEventListener('pointerleave', () => pointers.size === 0 && this.#setHover(null));
-    c.addEventListener('dblclick', (e) => this.#zoomAt(e.offsetX, e.shiftKey ? 0.5 : 2));
+    c.addEventListener('pointerleave', () => {
+      if (pointers.size === 0) this.#setHover(null);
+      if (!scrub) this.#setAxisHover(null);
+    });
+    c.addEventListener('dblclick', (e) => !this.#onAxis(e.offsetX, e.offsetY) && this.#zoomAt(e.offsetX, e.shiftKey ? 0.5 : 2));
     c.addEventListener('keydown', (e) => {
       const mid = GUTTER + this.#plotWidth() / 2, step = this.#plotWidth() * 0.2;
       const keys = {
@@ -401,7 +451,7 @@ export class PianoRoll {
       ctx.fillRect(px, 0, 1, plotH);
       ctx.fillStyle = k.text;
       const label = step >= 60 ? `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, '0')}` : `${+t.toFixed(2)}s`;
-      ctx.fillText(label, px + 3, H - 7);
+      ctx.fillText(label, px + 3, H - 6);
     }
 
     ctx.save();
@@ -496,19 +546,48 @@ export class PianoRoll {
     }
     ctx.restore();
 
-    // Playhead, with a handle on the time axis.
+    // The seek bar along the top of the axis: a track, filled up to the playhead.
+    const trackY = plotH + 6;
+    if (this.seekable && ph !== null) {
+      ctx.fillStyle = k.grid;
+      ctx.fillRect(GUTTER, trackY - 1.5, W - GUTTER, 3);
+      ctx.fillStyle = k.playhead;
+      ctx.fillRect(GUTTER, trackY - 1.5, Math.min(W, Math.max(GUTTER, x(ph))) - GUTTER, 3);
+    }
+
+    // Playhead, with a round handle on the seek bar.
     if (ph !== null) {
       const px = Math.round(x(ph));
       if (px >= GUTTER - 1 && px <= W + 1) {
         ctx.fillStyle = k.playhead;
         ctx.fillRect(px - 1, 0, 2, plotH);
         ctx.beginPath();
-        ctx.moveTo(px - 6, plotH);
-        ctx.lineTo(px + 6, plotH);
-        ctx.lineTo(px, plotH + 8);
-        ctx.closePath();
+        ctx.arc(px, trackY, this.axisHover !== null ? 7 : 6, 0, 2 * Math.PI);
         ctx.fill();
+        ctx.strokeStyle = k.bg;
+        ctx.lineWidth = 2;
+        ctx.stroke();
       }
+    }
+
+    // Over the seek bar: the time the pointer would seek to, in a bubble over the time labels (the
+    // floating controls sit just above the axis and would hide it there).
+    if (this.seekable && this.axisHover !== null) {
+      const hx = Math.min(W, Math.max(GUTTER, this.axisHover));
+      const label = formatTime(axisTime(hx, { t0: this.t0, pps: this.pps, left: GUTTER, right: W, duration: this.duration }));
+      ctx.font = '600 12px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const bw = ctx.measureText(label).width + 14, bh = 18;
+      const bx = Math.min(W - bw - 2, Math.max(GUTTER + 2, hx - bw / 2)), by = H - bh - 1;
+      ctx.fillStyle = k.strong;
+      ctx.fillRect(Math.round(hx) - 0.5, plotH, 1, by - plotH);
+      ctx.beginPath();
+      ctx.roundRect(bx, by, bw, bh, 6);
+      ctx.fill();
+      ctx.fillStyle = k.bg;
+      ctx.fillText(label, bx + bw / 2, by + bh / 2 + 0.5);
+      ctx.textAlign = 'left';
     }
 
     // Tell the page which note to describe: the hovered one, else the selected one, and where.

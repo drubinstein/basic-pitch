@@ -73,3 +73,18 @@ export function toneFile(name, seconds, hz = 440) {
   fs.writeFileSync(file, buf);
   return file;
 }
+
+export const settle = (ms = 400) => new Promise((r) => setTimeout(r, ms));
+
+// Open an audio file through the file picker and wait until it's playable.
+export async function openFile(page, file) {
+  const name = file.split(/[\\/]/).pop();
+  await (await page.$('#file')).uploadFile(file);
+  await page.waitForFunction((n) => window.basicPitch?.name === n && !document.getElementById('play').disabled, { timeout: 30000 }, name);
+}
+
+// Press play and wait until the audio is actually moving.
+export async function play(page) {
+  await page.click('#play');
+  await page.waitForFunction(() => { const a = document.getElementById('audio'); return !a.paused && a.currentTime > 0.1; }, { timeout: 10000 });
+}

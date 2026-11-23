@@ -3,13 +3,11 @@
 // Needs a build (npm run build) and Chrome; run with npm run test:e2e.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { serve, launch, openPage, toneFile } from './harness.mjs';
+import { serve, launch, openPage, toneFile, openFile, play, settle } from './harness.mjs';
 
 let server, browser;
 before(async () => { server = await serve(); browser = await launch(); });
 after(async () => { await browser?.close(); server?.close(); });
-
-const settle = (ms = 400) => new Promise((r) => setTimeout(r, ms));
 
 // What the player shows, and what the audio element is doing.
 const state = (page) => page.evaluate(() => {
@@ -18,17 +16,6 @@ const state = (page) => page.evaluate(() => {
 });
 const SHOWS_PLAY = { label: 'Play', playing: false, paused: true };
 const SHOWS_PAUSE = { label: 'Pause', playing: true, paused: false };
-
-async function openFile(page, file) {
-  const name = file.split(/[\\/]/).pop();
-  await (await page.$('#file')).uploadFile(file);
-  await page.waitForFunction((n) => window.basicPitch?.name === n && !document.getElementById('play').disabled, { timeout: 30000 }, name);
-}
-
-async function play(page) {
-  await page.click('#play');
-  await page.waitForFunction(() => { const a = document.getElementById('audio'); return !a.paused && a.currentTime > 0.1; }, { timeout: 10000 });
-}
 
 test('the button shows Pause while playing and Play once paused', async () => {
   const { page, errors } = await openPage(browser, server.url);

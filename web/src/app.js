@@ -2,7 +2,8 @@
 // back, play the file (and/or the notes, through a small synth) with a playhead over the roll, and
 // keep finished results in this browser so reopening a file is instant.
 import { FRAMES_PER_WINDOW, N_PITCHES, SAMPLE_RATE, frameToTime, nOutputFrames } from './pipeline.js';
-import { PianoRoll } from './roll.js';
+import { PianoRoll, GUTTER, AXIS } from './roll.js';
+import { keyTime } from './scrub.js';
 import * as cache from './cache.js';
 import { Clock, formatTime, ANCHOR } from './playback.js';
 import { startMic, toWav } from './mic.js';
@@ -29,6 +30,17 @@ const roll = new PianoRoll($('roll'), frameToTime, {
 });
 
 window.pianoRoll = roll; // for scripted checks
+
+// The time axis is a seek bar (the roll handles the pointer); this slider over it is its keyboard
+// and screen-reader side.
+const scrub = $('scrub');
+Object.assign(scrub.style, { left: `${GUTTER}px`, height: `${AXIS}px` });
+scrub.addEventListener('keydown', (e) => {
+  const t = keyTime(e.key, clock.time(), roll.duration, { shift: e.shiftKey });
+  if (t === null) return;
+  e.preventDefault();
+  seek(t);
+});
 const setStatus = (text) => { $('status').textContent = text; };
 const setStats = (text) => {
   $('stats').replaceChildren();
@@ -176,7 +188,7 @@ function resetRoll(duration, totalFrames, keepView = false) {
   roll.reset(duration, totalFrames);
   if (kept) Object.assign(roll, kept);
   synthNotes({ replace: true });
-  $('total').textContent = formatTime(duration);
+  showDuration(duration);
   showTime(clock.time());
   if (audio.src) {
     roll.setPlayhead(clock.time());
@@ -337,6 +349,8 @@ function loadAudio(blob) {
   clock.reset();
   $('player').hidden = false;
   $('play').disabled = false;
+  roll.seekable = true;
+  scrub.hidden = false;
 }
 
 function audioGraph() {
@@ -388,7 +402,15 @@ document.querySelector('.unit.mix .knobs').append(mixKnob.root);
 
 function showTime(t) {
   const text = formatTime(t);
-  if ($('time').textContent !== text) $('time').textContent = text;
+  if ($('time').textContent === text) return;
+  $('time').textContent = text;
+  scrub.setAttribute('aria-valuenow', t.toFixed(1));
+  scrub.setAttribute('aria-valuetext', text);
+}
+
+function showDuration(duration) {
+  $('total').textContent = formatTime(duration);
+  scrub.setAttribute('aria-valuemax', duration.toFixed(1));
 }
 
 function frame(now) {
@@ -513,6 +535,8 @@ async function startRecording() {
   audio.pause();
   if (audio.getAttribute('src')) { audio.removeAttribute('src'); audio.load(); }
   $('player').hidden = true;
+  roll.seekable = false;
+  scrub.hidden = true;
   current = null;
   finished = null;
   results = [];
@@ -600,7 +624,7 @@ async function recordingMessage(m, session, result) {
     finished = { name, mode: 'live', notes: result.notes };
     $('again').hidden = false;
     $('download').hidden = false;
-    $('total').textContent = formatTime(duration);
+    showDuration(duration);
     setStatus(`${name}: ${result.notes.length} notes`);
     setStats(`Microphone · ${modeLabel(!isDefaultFor('live'))} · ${session.runtime} · model ${(m.modelMs / 1000).toFixed(2)} s for ${duration.toFixed(1)} s of audio`);
     current.hash = await cache.fileHash(await session.blob.arrayBuffer()).catch(() => null);

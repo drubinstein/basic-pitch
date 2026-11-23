@@ -53,6 +53,9 @@
     #roll { flex: 1; width: 100%; height: 100%; touch-action: none; cursor: grab; outline: none; display: block; }
     #roll:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
     #roll:active { cursor: grabbing; }
+    /* The seek bar's keyboard side, over the time axis; the canvas draws it and takes the pointer. */
+    .scrub { position: absolute; right: 0; bottom: 0; z-index: 1; pointer-events: none; border-radius: 4px; outline: none; }
+    .scrub:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
     button, .file { font: inherit; font-size: 14px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
     button:hover { border-color: var(--accent); }
     button:disabled { opacity: 0.5; cursor: default; }
@@ -83,19 +86,19 @@
     .stats:empty { display: none; }
     .stats span { background: color-mix(in srgb, var(--surface) 85%, transparent); border-radius: 6px; padding: 2px 6px; }
     .fab { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 10px; background: var(--surface); font-size: 13.5px; }
-    .layers { left: 52px; bottom: 34px; box-shadow: none; z-index: 4; }
+    .layers { left: 52px; bottom: 42px; box-shadow: none; z-index: 4; }
     .pop { position: absolute; bottom: calc(100% + 8px); left: 0; background: var(--surface); border-radius: 10px; padding: 10px 14px; min-width: 230px;
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22); display: grid; gap: 8px; font-size: 14px; }
     .pop label { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
     .pop small { color: var(--text-muted); }
-    .zoom { right: 12px; bottom: 34px; display: flex; flex-direction: column; gap: 10px; align-items: center; box-shadow: none; }
+    .zoom { right: 12px; bottom: 42px; display: flex; flex-direction: column; gap: 10px; align-items: center; box-shadow: none; }
     .zoom button { width: 40px; height: 40px; padding: 0; border-radius: 8px; display: grid; place-items: center; background: var(--surface); color: var(--text-muted); }
     .zoom button:hover { color: var(--text); }
     .zoom .stack { display: flex; flex-direction: column; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18), 0 1px 8px rgba(0, 0, 0, 0.06); }
     .zoom .stack button { box-shadow: none; border-radius: 0; }
     .zoom .stack button + button { border-top: 1px solid var(--border); }
     #follow[aria-pressed="true"] { color: var(--accent); }
-    .player { bottom: 34px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: var(--surface); border-radius: 28px; padding: 5px 6px 5px 5px; }
+    .player { bottom: 42px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: var(--surface); border-radius: 28px; padding: 5px 6px 5px 5px; }
     .player .play { width: 42px; height: 42px; border-radius: 50%; padding: 0; display: grid; place-items: center; background: var(--accent-fill); color: #fff; box-shadow: none; }
     .player .play .i-pause, .player.playing .play .i-play { display: none; }
     .player.playing .play .i-pause { display: block; }
@@ -109,12 +112,12 @@
       .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
       .chips > * { flex: none; }
       .zoom .stack { display: none; } /* pinch to zoom */
-      .player { bottom: 30px; left: 46px; right: 56px; transform: none; justify-content: space-between; }
+      .player { bottom: 38px; left: 46px; right: 56px; transform: none; justify-content: space-between; }
       .player { gap: 6px; }
       .player .clock { min-width: 0; font-size: 12px; }
       .player .play { width: 36px; height: 36px; }
       .listen label { padding: 6px 8px; font-size: 12.5px; }
-      .layers { bottom: 92px; left: 46px; }
+      .layers { bottom: 100px; left: 46px; }
       .panel-head span { display: none; }
     }
     .chip svg { width: 16px; height: 16px; vertical-align: -3px; margin-right: 2px; }
@@ -274,6 +277,7 @@
   <section id="panel-transcribe" class="panel" aria-label="Transcribe">
     <div id="stage">
       <canvas id="roll" tabindex="0" aria-label="Piano roll of transcribed notes"></canvas>
+      <div id="scrub" class="scrub" role="slider" tabindex="0" aria-label="Playback position" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00.0" hidden></div>
       <div id="tip" role="tooltip" hidden></div>
 
       <div class="float overlay">
@@ -409,7 +413,9 @@
       <table class="keys">
         <tbody>
         <tr><td><kbd>space</kbd> or the play button</td><td>Play or pause</td></tr>
+        <tr><td>Click or drag along the time axis under the roll</td><td>Jump there, or scrub</td></tr>
         <tr><td>Click empty space on the roll</td><td>Jump there</td></tr>
+        <tr><td><kbd>tab</kbd> to the time axis, then <kbd>←</kbd> <kbd>→</kbd> (<kbd>shift</kbd> for 1 s) · <kbd>page up</kbd> <kbd>page down</kbd> · <kbd>home</kbd> <kbd>end</kbd></td><td>Step 5 s · 30 s · go to the start or end</td></tr>
         <tr><td>Pan while playing</td><td>Stop following the playhead (the playhead button at the bottom right brings it back)</td></tr>
         <tr><td><b>Song</b> · <b>Notes</b> · <b>Both</b></td><td>Hear the original, the transcribed notes on a simple synth, or the notes over the song to compare. The <b>Mix</b> knob in the control panel sets anything in between.</td></tr>
         </tbody>
